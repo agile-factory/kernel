@@ -1,22 +1,181 @@
-### AL ###
-#Template for AL projects for Dynamics 365 Business Central
-#launch.json folder
+# ==============================================================================
+# Operating System
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ==============================================================================
+# IDEs and Editors
+# ==============================================================================
 .vscode/
-#Cache folder
-.alcache/
-#Symbols folder
-.alpackages/
-#Snapshots folder
-.snapshots/
-#Testing Output folder
-.output/
-#Extension App-file
-*.app
-#Rapid Application Development File
-rad.json
-#Translation Base-file
-*.g.xlf
-#License-file
-*.flf
-#Test results file
-TestResults.xml
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ==============================================================================
+# Environment Variables
+# ==============================================================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
+# ==============================================================================
+# Go
+# ==============================================================================
+services/api/bin/
+services/api/tmp/
+services/api/vendor/
+services/api/*.exe
+services/api/*.exe~
+services/api/*.dll
+services/api/*.so
+services/api/*.dylib
+services/api/*.test
+services/api/*.out
+services/api/coverage.out
+services/api/coverage.html
+services/api/build-errors.log
+
+# Go workspace file
+services/api/go.work
+
+# ==============================================================================
+# Node / Next.js
+# ==============================================================================
+services/web/node_modules/
+services/web/.next/
+services/web/out/
+services/web/build/
+services/web/dist/
+services/web/.nuxt/
+services/web/.cache/
+services/web/.vercel/
+services/web/.turbo/
+
+# Testing
+services/web/coverage/
+services/web/.nyc_output/
+
+# Logs
+services/web/*.log
+services/web/npm-debug.log*
+services/web/yarn-debug.log*
+services/web/yarn-error.log*
+
+# ==============================================================================
+# Docker
+# ==============================================================================
+docker-compose.override.yml
+
+# ==============================================================================
+# Terraform
+# ==============================================================================
+infrastructure/terraform/**/.terraform/
+infrastructure/terraform/**/.terraform.lock.hcl
+infrastructure/terraform/**/terraform.tfstate
+infrastructure/terraform/**/terraform.tfstate.backup
+infrastructure/terraform/**/.terraform.tfstate.lock.info
+infrastructure/terraform/**/tfplan
+infrastructure/terraform/**/crash.log
+infrastructure/terraform/**/.terraformrc
+infrastructure/terraform/**/terraform.rc
+infrastructure/terraform/**/*.tfvars
+!infrastructure/terraform/**/*.tfvars.example
+
+# ==============================================================================
+# Secrets & Keys
+# ==============================================================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+.secrets/
+private.pem
+public.pem
+
+# ==============================================================================
+# Databases
+# ==============================================================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ==============================================================================
+# Backups
+# ==============================================================================
+backups/
+*.bak
+*.backup
+*.dump
+
+# ==============================================================================
+# Logs
+# ==============================================================================
+logs/
+*.log
+log/
+
+# ==============================================================================
+# Temporary files
+# ==============================================================================
+tmp/
+temp/
+*.tmp
+
+# ==============================================================================
+# Documentation build
+# ==============================================================================
+docs/_build/
+site/
+
+# ==============================================================================
+# Miscellaneous
+# ==============================================================================
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+*.pid
+*.seed
+*.pid.lock
+.npm
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# ==============================================================================
+# CI/CD
+# ==============================================================================
+.github/workflows/*.log
+
+# ==============================================================================
+# Monitoring
+# ==============================================================================
+prometheus_data/
+grafana_data/
+
+# ==============================================================================
+# S3 Local (MinIO)
+# ==============================================================================
+minio_data/
