@@ -10,11 +10,11 @@
 
 ## **Summary**
 
-Ce RFC définit les fondations techniques et architecturales d'un **socle backend Go réutilisable** destiné à être la base de plusieurs SaaS (immobilier, facturation, RH, etc.).
+Ce RFC définit les fondations techniques et architecturales d'un **socle backend Go réutilisable** destiné à être la base de plusieurs SaaS (immobilier, Social network, shorter workflow product, etc.).
 
 La proposition repose sur trois piliers :
 
-1. **Go en stack 100% standard library** (pas de framework HTTP), avec uniquement quatre dépendances externes ciblées (`pgx`, `jwt`, `uuid`, `bcrypt`).
+1. **Go en stack 100% standard library** (pas de framework HTTP), avec uniquement quatre dépendances externes ciblées (`pgx`, `bcrypt`).
 2. **Clean Architecture en trois niveaux** : `kernel/` (technique pur) → `platform/` (briques SaaS réutilisables) → `modules/` (métier spécifique au SaaS).
 3. **Multi-tenancy natif dès le jour 1** via un `tenant_id` propagé par `context.Context`.
 
@@ -95,9 +95,6 @@ L'intégralité du code applicatif s'appuie sur la stdlib Go :
 Seules les fonctionnalités impossibles ou déraisonnables à implémenter from-scratch justifient une dépendance :
 
 ```text
-github.com/jackc/pgx/v5         → driver Postgres haute performance
-github.com/golang-jwt/jwt/v5    → JWT (pas de stdlib pour ça)
-github.com/google/uuid          → UUID v4/v7
 golang.org/x/crypto             → bcrypt, argon2 (extension officielle stdlib)
 ```
 
@@ -111,7 +108,6 @@ Ajoutées **uniquement quand le besoin est avéré** :
 github.com/redis/go-redis/v9    → si cache Redis
 github.com/stripe/stripe-go     → si billing Stripe
 github.com/aws/aws-sdk-go-v2    → si stockage S3
-github.com/joho/godotenv        → chargement .env en dev
 ```
 
 ### 2. Architecture en trois niveaux
