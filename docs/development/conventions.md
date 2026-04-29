@@ -11,8 +11,6 @@
 - [Error Handling](#error-handling)
 - [Frameworks & Languages](#frameworks--languages)
 
----
-
 ## General Principles
 
 - **Readability over Brevity:** Code should be clear and self-explanatory.
@@ -20,8 +18,6 @@
 - **DRY (Don't Repeat Yourself):** Avoid redundant code.
 - **KISS (Keep It Simple, Stupid):** Favor straightforward solutions.
 - **YAGNI (You Ain't Gonna Need It):** Do not add functionality until it's actually required.
-
----
 
 ## Naming & Casing
 
@@ -37,18 +33,10 @@
 - **Constants:** `SCREAMING_SNAKE_CASE`
 - **Variables:** `camelCase`
 
----
-
 ## Formatting & Tooling
-
----
 
 ## Comments & Documentation
 
----
-
 ## Error Handling
-
----
 
 ## Frameworks & Languages
