@@ -3,13 +3,13 @@
 ## Table of Contents
 
 - [General Principles](#general-principles)
-- [Naming & Casing](#naming-conventions)
+- [Naming & Casing](#naming--casing)
   - [File Name](#file-name)
   - [Code](#code)
-- [Formatting & Tooling](#formatting-tooling)
-- [Comments & Documentation](#comments-documentation)
+- [Formatting & Tooling](#formatting--tooling)
+- [Comments & Documentation](#comments--documentation)
 - [Error Handling](#error-handling)
-- [Framework/Language Specifics](#framework-language-specifics)
+- [Frameworks & Languages](#frameworks--languages)
 
 ---
 
