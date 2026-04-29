@@ -1,4 +1,4 @@
-# _RFC #0001:_ Architecture & Stack Technique du Socle SaaS
+# _RFC #0002:_ Architecture & Stack Technique du Socle SaaS
 
 **date:** `2026 Apr 28`
 
@@ -271,7 +271,7 @@ func (r *Repo) FindAll(ctx context.Context) ([]*Property, error) {
 }
 ```
 
-> **Note** : la stratégie multi-tenant fait l'objet d'un RFC dédié (RFC-0002) qui détaille les arbitrages, garde-fous et alternatives.
+> **Note** : la stratégie multi-tenant fait l'objet d'un RFC dédié (RFC-0003) qui détaille les arbitrages, garde-fous et alternatives.
 
 ### 6. Observabilité dès le départ
 
