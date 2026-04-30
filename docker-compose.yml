@@ -28,9 +28,9 @@ services:
     environment:
       DATABASE_URL: postgres://lokatik:lokatik_dev_password@postgres:5432/lokatik
       JWT_SECRET: dev_jwt_secret_change_in_production_please
-      RUST_LOG: info,lokatik_backend=debug
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 3000
+      APP_ENV: development
+      LOG_LEVEL: debug
+      PORT: 3000
     depends_on:
       postgres:
         condition: service_healthy

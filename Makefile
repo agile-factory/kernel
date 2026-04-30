@@ -11,7 +11,7 @@ dev-detached: ## Start all services in background
 	docker compose up --build -d
 
 dev-backend: ## Start backend only (local)
-	cd backend && cargo run
+	cd backend && make run
 
 dev-frontend: ## Start frontend only (local)
 	cd frontend && npm run dev
@@ -23,7 +23,7 @@ dev-frontend: ## Start frontend only (local)
 build: build-backend build-frontend ## Build all
 
 build-backend: ## Build backend (release)
-	cd backend && cargo build --release
+	cd backend && make build
 
 build-frontend: ## Build frontend
 	cd frontend && npm run build
@@ -35,40 +35,37 @@ build-frontend: ## Build frontend
 test: test-backend test-frontend ## Run all tests
 
 test-backend: ## Run backend tests
-	cd backend && cargo test
+	cd backend && make test
 
 test-frontend: ## Run frontend tests
 	cd frontend && npm test
 
 # ============================================================================
-# Rust Tools
+# Go Tools
 # ============================================================================
 
-clippy: ## Run Clippy linter
-	cd backend && cargo clippy -- -D warnings
+fmt: ## Format Go code
+	cd backend && make fmt
 
-fmt: ## Format Rust code
-	cd backend && cargo fmt
-
-fmt-check: ## Check Rust formatting
-	cd backend && cargo fmt -- --check
+tidy: ## Tidy go modules
+	cd backend && make tidy
 
 # ============================================================================
 # Database
 # ============================================================================
 
 migrate: ## Run database migrations
-	cd backend && sqlx migrate run
+	@echo "TODO: Add migration script"
 
 migrate-revert: ## Revert last migration
-	cd backend && sqlx migrate revert
+	@echo "TODO: Add migration revert script"
 
 db-shell: ## Open PostgreSQL shell
 	docker compose exec postgres psql -U lokatik -d lokatik
 
 db-reset: ## Reset database (drop + recreate + migrate)
 	docker compose exec postgres psql -U lokatik -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-	cd backend && sqlx migrate run
+	@echo "TODO: Add migration script"
 
 # ============================================================================
 # Docker
@@ -100,11 +97,11 @@ logs-frontend: ## Show frontend logs
 # ============================================================================
 
 clean: ## Clean build artifacts
-	cd backend && cargo clean
+	cd backend && make clean
 	rm -rf frontend/dist frontend/node_modules
 
 install: ## Install all dependencies
-	cd backend && cargo fetch
+	cd backend && make tidy
 	cd frontend && npm install
 
 help: ## Show this help
