@@ -3,7 +3,7 @@ package http
 import (
 	"encoding/json"
 	"net/http"
-
+	"github.com/google/uuid"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/usecase"
@@ -37,7 +37,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// For a real app, generate a secure UUID.
-	id := "uuid-stub" // TODO: Add a real UUID generator
+	id := uuid.New().String()
 
 	user, err := h.registerUC.Execute(r.Context(), id, req.TenantID, req.Email, req.Password)
 	if err != nil {
@@ -52,6 +52,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Email:    user.Email.String(),
 		Role:     string(user.Role),
 		TenantID: user.TenantID,
+		Token: "a generer plus tard",
 	}
 
 	response.JSON(w, http.StatusCreated, userDTO)

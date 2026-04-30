@@ -56,4 +56,5 @@ type UserDTO struct {
 	Email    string `json:"email"`
 	Role     string `json:"role"`
 	TenantID string `json:"tenantId"`
+	Token string `json:"token"`	
 }

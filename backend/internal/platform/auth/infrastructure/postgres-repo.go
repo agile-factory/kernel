@@ -2,23 +2,23 @@ package infrastructure
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/domain"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // PostgresUserRepository is a mock implementation of domain.UserRepository
 // Wait until the database driver (pgx/sqlx) is configured to implement the real one.
 type PostgresUserRepository struct {
 	mu    sync.RWMutex
-	users map[string]*domain.User
+	db *pgxpool.Pool
 }
 
-// NewPostgresUserRepository creates a new mocked PostgresUserRepository.
-func NewPostgresUserRepository() *PostgresUserRepository {
+// NewPostgresUserRepository creates a new PostgresUserRepository.
+func NewPostgresUserRepository(db *pgxpool.Pool) *PostgresUserRepository {
 	return &PostgresUserRepository{
-		users: make(map[string]*domain.User),
+		db: db,
 	}
 }
 
@@ -26,8 +26,9 @@ func NewPostgresUserRepository() *PostgresUserRepository {
 func (r *PostgresUserRepository) Save(ctx context.Context, user *domain.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	r.users[user.Email.String()] = user
+	if _, err := r.db.Exec(ctx, queryInsertUser, user.ID, user.TenantID, user.Email, user.HashedPassword, user.Role, user.CreatedAt, user.UpdatedAt); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -36,11 +37,11 @@ func (r *PostgresUserRepository) FindByEmail(ctx context.Context, email domain.E
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	user, ok := r.users[email.String()]
-	if !ok {
-		return nil, domain.ErrUserNotFound
+	var user domain.User
+	if err := r.db.QueryRow(ctx, queryGetUserByEmail, email.String()).Scan(&user.ID, &user.Email, &user.HashedPassword, &user.Role, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		return nil, err
 	}
-	return user, nil
+	return &user, nil
 }
 
 // FindByID retrieves the user by ID from the mock storage.
@@ -48,10 +49,9 @@ func (r *PostgresUserRepository) FindByID(ctx context.Context, id string) (*doma
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, user := range r.users {
-		if user.ID == id {
-			return user, nil
-		}
+	var user domain.User
+	if err := r.db.QueryRow(ctx, queryGetUserByID, id).Scan(&user.ID, &user.Email, &user.HashedPassword, &user.Role, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		return nil, err
 	}
-	return nil, errors.New("user not found by id")
+	return &user, nil
 }

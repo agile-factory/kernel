@@ -8,9 +8,9 @@ import (
 type Role string
 
 const (
-	ROLE_ADMIN  Role = "admin"
-	ROLE_AGENT  Role = "agent"
-	ROLE_VIEWER Role = "viewer"
+	ROLE_ADMIN  Role = "ROLE_ADMIN"
+	ROLE_AGENT  Role = "ROLE_AGENT"
+	ROLE_VIEWER Role = "ROLE_VIEWER"
 )
 
 // User represents the central authentication entity.

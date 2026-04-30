@@ -1,32 +1,32 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: lokatik-postgres
+    container_name: ${APP_NAME:-myapp}-postgres
     environment:
-      POSTGRES_USER: lokatik
-      POSTGRES_PASSWORD: lokatik_dev_password
-      POSTGRES_DB: lokatik
+      POSTGRES_USER: ${APP_NAME:-myapp}
+      POSTGRES_PASSWORD:  ${APP_NAME:-myapp}_dev_password
+      POSTGRES_DB: ${APP_NAME:-myapp}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lokatik -d lokatik"]
+      test: ["CMD-SHELL", "pg_isready -U  ${APP_NAME:-myapp} -d  ${APP_NAME:-myapp}"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - lokatik-network
+      - boilerplate-network
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: lokatik-backend
+    container_name: ${APP_NAME:-myapp}-backend
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgres://lokatik:lokatik_dev_password@postgres:5432/lokatik
+      DATABASE_URL: postgres://${APP_NAME:-myapp}:${APP_NAME:-myapp}_dev_password@postgres:5432/${APP_NAME:-myapp}
       JWT_SECRET: dev_jwt_secret_change_in_production_please
       APP_ENV: development
       LOG_LEVEL: debug
@@ -35,13 +35,13 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - lokatik-network
+      - boilerplate-network
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: lokatik-frontend
+    container_name: ${APP_NAME:-myapp}-frontend
     ports:
       - "5173:5173"
     environment:
@@ -49,11 +49,11 @@ services:
     depends_on:
       - backend
     networks:
-      - lokatik-network
+      - boilerplate-network
 
 volumes:
   postgres_data:
 
 networks:
-  lokatik-network:
+  boilerplate-network:
     driver: bridge

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,7 +11,9 @@ import (
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/bootstrap"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/config"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/logger"
+	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/migrator"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/server"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -33,9 +36,27 @@ func main() {
 	slog.SetDefault(log)
 
 	slog.Info("Starting application", "env", cfg.Environment, "port", cfg.Port)
+	// initialize db
+	db, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	if err := db.Ping(context.Background()); err != nil {
+		panic(fmt.Sprintf("Failed to connect to database: %v", err))
+	}
+	slog.Info("Successfully connected to database")
+
+	// Run database migrations
+	if err := migrator.Run(cfg.DatabaseURL, "file://migrations"); err != nil {
+		slog.Error("Failed to run database migrations", "error", err)
+		os.Exit(1)
+	}
 
 	// Initialize dependency injection container
-	container := bootstrap.NewContainer(cfg, log)
+	container := bootstrap.NewContainer(cfg, log, db)
+
+
 
 	// Initialize HTTP server
 	srv := server.New(cfg, container.Router())

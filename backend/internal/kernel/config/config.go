@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 // Config holds the configuration for the application
@@ -14,11 +16,14 @@ type Config struct {
 	ShutdownTimeout time.Duration
 	JWTSecret       string
 	TokenLifespan   time.Duration
+	DatabaseURL     string
 }
 
 // Load retrieves the configuration from environment variables
 // with fallback to default values.
 func Load() *Config {
+	_ = godotenv.Load()          // Load .env from current directory (backend)
+	_ = godotenv.Load("../.env") // Load .env from root directory as fallback
 	return &Config{
 		Environment:     getEnv("APP_ENV", "development"),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
@@ -27,12 +32,13 @@ func Load() *Config {
 		ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", 5*time.Second),
 		JWTSecret:       getEnv("JWT_SECRET", "super-secret-key-change-in-production"),
 		TokenLifespan:   getEnvAsDuration("TOKEN_LIFESPAN", 24*time.Hour),
+		DatabaseURL:     getEnv("DATABASE_URL", "postgres://lokatik:lokatik_dev_password@postgres:5432/lokatik"),
 	}
 }
 
 // getEnv reads an environment variable or returns a default value
 func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
+	if value, exists := os.LookupEnv(key); exists && value != "" {
 		return value
 	}
 	return fallback

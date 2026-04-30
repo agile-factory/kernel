@@ -1,4 +1,4 @@
-.PHONY: dev build test migrate clippy fmt docker-up docker-down logs clean
+.PHONY: dev build test migrate migrate-down migrate-force fmt docker-up docker-down logs clean
 
 # ============================================================================
 # Development
@@ -54,18 +54,28 @@ tidy: ## Tidy go modules
 # Database
 # ============================================================================
 
-migrate: ## Run database migrations
-	@echo "TODO: Add migration script"
+DB_URL         ?= $(shell grep '^DATABASE_URL' .env | cut -d '=' -f2-)
+MIGRATIONS_DIR := backend/migrations
+MIGRATE        := $(shell go env GOPATH)/bin/migrate
 
-migrate-revert: ## Revert last migration
-	@echo "TODO: Add migration revert script"
+migrate: ## Apply all pending UP migrations
+	@echo "→ Applying migrations from $(MIGRATIONS_DIR)..."
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DB_URL)" up
+
+migrate-down: ## Roll back the last migration step
+	@echo "→ Rolling back last migration..."
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DB_URL)" down 1
+
+migrate-force: ## Force a specific migration version (usage: make migrate-force VERSION=<n>)
+	@echo "→ Forcing migration version $(VERSION)..."
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DB_URL)" force $(VERSION)
 
 db-shell: ## Open PostgreSQL shell
 	docker compose exec postgres psql -U lokatik -d lokatik
 
 db-reset: ## Reset database (drop + recreate + migrate)
 	docker compose exec postgres psql -U lokatik -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-	@echo "TODO: Add migration script"
+	$(MAKE) migrate
 
 # ============================================================================
 # Docker
