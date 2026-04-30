@@ -1,128 +1,103 @@
-# 🏠 Lokatik
+# Agile Factory Boilerplate 🚀
 
-**La plateforme de gestion locative n°1 au Sénégal**
+![Go Version](https://img.shields.io/badge/Go-1.25.0-00ADD8?style=flat&logo=go)
+![Architecture](https://img.shields.io/badge/Architecture-Clean-brightgreen)
+![Status](https://img.shields.io/badge/Status-Active-success)
+
+A highly scalable, production-grade Go backend boilerplate designed for Multi-Tenant SaaS applications. Built strictly following **Clean Architecture** principles and relying on the Go standard library to avoid framework lock-in.
 
 ---
 
-## Le Problème
+## 🏗 Architecture
 
-Au Sénégal, la majorité des agences immobilières et des propriétaires gèrent encore leurs biens locatifs sur papier ou Excel :
+This project is structured in three distinct layers, ensuring that business logic is completely decoupled from technical implementation details. 
 
-- **Aucune visibilité** sur le taux d'occupation et la rentabilité
-- **Loyers impayés** non suivis, relances manuelles inefficaces
-- **Contrats de bail** rédigés à la main, non conformes
-- **Quittances** absentes ou incomplètes
-- **Aucun historique** centralisé des locataires et paiements
+- **Kernel (`internal/kernel`)**: The pure technical foundation. It contains shared, domain-agnostic utilities such as configuration, the HTTP server, robust error handling, and structured logging.
+- **Platform (`internal/platform`)**: Reusable SaaS building blocks (e.g., Auth, Tenant management, Billing). These components are identical across different SaaS products.
+- **Modules (`internal/modules`)**: The specific business logic of the application. 
 
-## La Solution
+*For an in-depth explanation of the architecture, see [RFC-0002](docs/rfcs/0002-Create-Boilerplate-for-Agile-Factory.md).*
 
-Lokatik digitalise le **cycle locatif complet** :
+---
 
-```
-Bien → Locataire → Bail → Paiement → Quittance
-```
+## ✨ Features
 
-Une seule plateforme pour gérer l'ensemble de votre patrimoine immobilier.
+### 🛡 Production-Grade Error Handling
+A sophisticated error system (`internal/kernel/errors`) designed for observability and developer experience:
+- **Traceable Stacks**: Captures up to 64 stack frames at the exact moment of failure, ensuring you never have to guess where an error originated.
+- **Consistent API Responses**: Automatically maps domain errors to HTTP status codes, leaking zero internal stack traces to the public API while preserving them in the logs.
+- **Structured Error Chain**: Supports standard Go `errors.Is`/`errors.As` wrapping, preserving the original cause of an error.
+- **Sentinel Errors**: Extensive catalog of predefined error codes spanning domains like Auth, Tenant, Billing, and Data.
 
-## Fonctionnalités MVP
+### 📝 Centralized Fan-Out Logging
+A unified logging architecture (`internal/kernel/logger`) utilizing `log/slog` to write structured data concurrently:
+- **`stdout`**: Human-readable text in development, JSON in production.
+- **`logs/app.log`**: A complete JSON audit trail of all events.
+- **`logs/error.log`**: Exclusively captures `ERROR` level and above for immediate incident triage.
+- **`logs/server.log`**: Dedicated HTTP access log for tracking API requests, durations, and status codes.
 
-- **Gestion multi-biens** : appartements, maisons, terrains, locaux commerciaux
-- **Dossier locataire complet** : CNI, profession, contact d'urgence
-- **Contrats de bail auto-générés** : PDF conforme au droit sénégalais
-- **Suivi des paiements** : avec rappels automatiques SMS
-- **Quittances de loyer** : PDF auto-générées
-- **Dashboard** : taux d'occupation, revenus, impayés, rentabilité
-- **Paiements mobile** : intégration Orange Money & Wave
-- **Notifications** : SMS et WhatsApp
+### 🔌 Zero-Magic Standard Library Stack
+- **Routing**: Native Go 1.22+ pattern-based HTTP multiplexer (`net/http`).
+- **Middleware**: Hand-rolled, lightweight middleware chain for recovery, logging, and tenant extraction.
+- **Minimal Dependencies**: Only relying on established standards like `bcrypt`.
 
-## Stack Technique
+---
 
-| Couche | Technologie | Justification |
-|--------|-------------|---------------|
-| **Frontend** | React + Vite + TypeScript | SPA rapide, typage fort, excellent DX |
-| **UI** | TailwindCSS | Styling utilitaire, responsive, léger |
-| **State** | Zustand | State management minimal et performant |
-| **Backend** | Rust + Axum + Tokio | Performance, sécurité mémoire, async natif |
-| **ORM** | SQLx | Requêtes vérifiées à la compilation, async |
-| **Base de données** | PostgreSQL | Robuste, extensible, excellent pour les données relationnelles |
-| **Auth** | JWT (jsonwebtoken) | Stateless, scalable |
-| **Infra** | Docker + Docker Compose | Environnement reproductible |
+## 🚀 Getting Started
 
-## Installation
+### Prerequisites
+- Go 1.25.0+
+- Docker & Docker Compose (Optional, for database and infrastructure)
 
-### Prérequis
+### Configuration
+The application is configured entirely via environment variables. By default, it runs smoothly out of the box. Key variables:
+- `APP_ENV`: `development` (default), `staging`, or `production`
+- `LOG_LEVEL`: `debug`, `info` (default), `warn`, `error`
+- `LOG_DIR`: `logs` (default)
+- `PORT`: `8080` (default)
 
-- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
-- [Rust](https://rustup.rs/) (pour le développement local)
-- [Node.js 20+](https://nodejs.org/) (pour le développement local)
-
-### Démarrage rapide
+### Running the Application
 
 ```bash
-# Cloner le repo
-git clone https://github.com/Cheikh-Nakamoto/Immobilier_Saas.git
-cd Immobilier_Saas
+# Clone the repository
+git clone https://github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate.git
+cd Agile-Factory-Boilerplate
 
-# Configurer l'environnement
-cp backend/.env.example backend/.env
-
-# Lancer avec Docker
-make dev
-
-# Ou sans Docker :
-# Terminal 1 - Backend
-cd backend && cargo run
-
-# Terminal 2 - Frontend
-cd frontend && npm install && npm run dev
+# Run the backend
+cd backend
+go run ./cmd/api/main.go
 ```
 
-### Accès
+You should see the application start up and log its fan-out destinations to the console and to the `logs/` directory.
 
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:5173 |
-| Backend API | http://localhost:3000 |
-| PostgreSQL | localhost:5432 |
+### Testing
 
-## Modèle Économique
-
-| Forfait | Prix/mois | Biens | Fonctionnalités |
-|---------|-----------|-------|-----------------|
-| **Starter** | 15 000 FCFA | Jusqu'à 20 | Gestion de base |
-| **Pro** | 35 000 FCFA | Jusqu'à 100 | + Notifications SMS |
-| **Agence** | 50 000 FCFA | Illimité | + Multi-utilisateurs |
-
-## Roadmap
-
-### V1 — MVP (Q1 2026)
-- CRUD biens, locataires, baux
-- Suivi des paiements
-- Dashboard avec KPIs
-- Génération PDF (contrats, quittances)
-
-### V2 — Intégrations (Q2 2026)
-- Paiements Orange Money & Wave
-- Notifications SMS & WhatsApp
-- Import/export CSV
-- Multi-utilisateurs par agence
-
-### V3 — Scale (Q3-Q4 2026)
-- Application mobile (React Native)
-- Comptabilité avancée
-- Expansion Côte d'Ivoire & Mali
-- API publique pour intégrations tierces
-
-## Structure du Projet
-
-```
-├── backend/          # API Rust (Axum + SQLx)
-├── frontend/         # SPA React (Vite + TypeScript)
-├── docs/             # Documentation technique
-├── scripts/          # Scripts utilitaires
-└── docker-compose.yml
+```bash
+cd backend
+go test ./... -v
 ```
 
-## Licence
+---
 
-MIT — voir [LICENSE](LICENSE)
+## 📂 Project Layout
+
+```text
+.
+├── backend/
+│   ├── cmd/api/main.go             # Application entry point
+│   ├── internal/
+│   │   ├── bootstrap/              # Dependency Injection & Routing
+│   │   ├── delivery/http/          # Global HTTP Middlewares & Routers
+│   │   ├── kernel/                 # Core technical infra (config, logger, errors)
+│   │   ├── platform/               # Reusable SaaS domains (auth, tenant, user)
+│   │   └── modules/                # SaaS-specific business logic
+├── docs/
+│   └── rfcs/                       # Architectural Decision Records & Proposals
+├── Makefile                        # Build scripts
+└── docker-compose.yml              # Infrastructure orchestration
+```
+
+---
+
+## 📄 License
+This project is licensed under the terms specified in the `LICENSE` file.

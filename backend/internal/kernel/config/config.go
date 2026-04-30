@@ -9,6 +9,7 @@ import (
 type Config struct {
 	Environment     string
 	LogLevel        string
+	LogDir          string
 	Port            string
 	ShutdownTimeout time.Duration
 	JWTSecret       string
@@ -21,6 +22,7 @@ func Load() *Config {
 	return &Config{
 		Environment:     getEnv("APP_ENV", "development"),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
+		LogDir:          getEnv("LOG_DIR", "logs"),
 		Port:            getEnv("PORT", "8080"),
 		ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", 5*time.Second),
 		JWTSecret:       getEnv("JWT_SECRET", "super-secret-key-change-in-production"),

@@ -18,7 +18,18 @@ func main() {
 	cfg := config.Load()
 
 	// Initialize structured logger
-	log := logger.New(cfg.LogLevel, cfg.Environment)
+	log, closeLog, err := logger.New(logger.Config{
+		Level:       cfg.LogLevel,
+		Environment: cfg.Environment,
+		Dir:         cfg.LogDir,
+	})
+	if err != nil {
+		// Fallback to simple stdout logger if we can't open log files
+		log = logger.NewSimple(cfg.LogLevel, cfg.Environment)
+		log.Error("Failed to initialize file logger, falling back to stdout", "error", err)
+	} else {
+		defer closeLog()
+	}
 	slog.SetDefault(log)
 
 	slog.Info("Starting application", "env", cfg.Environment, "port", cfg.Port)

@@ -44,6 +44,7 @@ func Logger(log *slog.Logger) func(http.Handler) http.Handler {
 
 			// Log the request context
 			log.Info("Request completed",
+				"source", "http",
 				"status", wrapped.status,
 				"method", r.Method,
 				"path", r.URL.Path,

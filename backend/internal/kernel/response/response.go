@@ -2,7 +2,9 @@ package response
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"net/http"
+	"os"
 
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
 )
@@ -13,28 +15,73 @@ func JSON(w http.ResponseWriter, status int, data interface{}) {
 	w.WriteHeader(status)
 	if data != nil {
 		if err := json.NewEncoder(w).Encode(data); err != nil {
-			// Cannot do much here since headers are already written
 			_ = err
 		}
 	}
 }
 
-// Error sends a JSON error response based on the provided error.
-// It formats it cleanly for the API consumer.
+// errorBody is the JSON shape returned to API consumers.
+// Stack and internal cause are intentionally absent — they live in logs only.
+type errorBody struct {
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	TraceID  string `json:"trace_id,omitempty"`
+	Debug    string `json:"debug,omitempty"` // populated in non-production only
+}
+
+// isProduction returns true when APP_ENV is "production" or "staging".
+// Both environments suppress internal stack details from API responses.
+func isProduction() bool {
+	env := os.Getenv("APP_ENV")
+	return env == "production" || env == "staging"
+}
+
+// Error sends a JSON error response.
+//
+// Behaviour:
+//   - Uses errors.As to unwrap the chain — works for wrapped AppErrors.
+//   - In production/staging: only Code and Message reach the client.
+//   - In development: also includes a "debug" field with the first stack frame
+//     so developers can pinpoint the call site without reading server logs.
+//   - TraceID is always forwarded when present (enables client-side log lookup).
+//   - The raw Cause and full stack trace are NEVER serialised into the response.
 func Error(w http.ResponseWriter, err error) {
 	var appErr *errors.AppError
-	if e, ok := err.(*errors.AppError); ok {
-		appErr = e
-	} else {
+
+	// errors.As walks the entire Unwrap() chain, so wrapped AppErrors are found
+	// even when the top-level value is a plain error.
+	if !stderrors.As(err, &appErr) {
 		appErr = errors.InternalServerError(err)
 	}
 
-	resp := map[string]interface{}{
-		"error": map[string]interface{}{
-			"code":    appErr.Code,
-			"message": appErr.Message,
-		},
+	body := errorBody{
+		Code:    appErr.Code,
+		Message: appErr.Message,
+		TraceID: appErr.TraceID,
 	}
 
-	JSON(w, appErr.HTTPCode, resp)
+	// In non-production environments, surface the most useful stack frame so
+	// developers can jump directly to the origin without opening server logs.
+	if !isProduction() && len(appErr.Stack) > 0 {
+		body.Debug = appErr.Stack[0].ShortFile() + ":" +
+			itoa(appErr.Stack[0].Line) + " · " +
+			appErr.Stack[0].ShortFunction()
+	}
+
+	JSON(w, appErr.HTTPCode, map[string]interface{}{"error": body})
+}
+
+// itoa converts an int to its decimal string — avoids importing strconv.
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	buf := [20]byte{}
+	pos := len(buf)
+	for n > 0 {
+		pos--
+		buf[pos] = byte(n%10) + '0'
+		n /= 10
+	}
+	return string(buf[pos:])
 }
