@@ -50,9 +50,12 @@ func NewRegisterUseCase(
 //  2. Verify the tenant exists and is active
 //  3. Check the email is not already taken
 //  4. Hash the password
-//  5. Persist the User (no tenant_id on the row)
-//  6. Create an ACTIVE self-membership linking the user to the tenant
-func (uc *RegisterUseCase) Execute(ctx context.Context, id, tenantID, emailStr, password string) (*authdomain.User, error) {
+//  5. Persist the User
+//  6. Create an ACTIVE self-membership with the specified role
+//
+// role must be one of ROLE_OWNER, ROLE_ADMIN, ROLE_AGENT, ROLE_VIEWER.
+// ROLE_OWNER should only be passed when the registering user is the tenant creator.
+func (uc *RegisterUseCase) Execute(ctx context.Context, id, tenantID, emailStr, password string, role memberdomain.MemberRole) (*authdomain.User, error) {
 	// 1. Validate email
 	email, err := authdomain.NewEmail(emailStr)
 	if err != nil {
@@ -86,9 +89,9 @@ func (uc *RegisterUseCase) Execute(ctx context.Context, id, tenantID, emailStr, 
 		return nil, err
 	}
 
-	// 6. Create an ACTIVE self-membership
+	// 6. Create an ACTIVE self-membership with the provided role
 	membershipID := uuid.New().String()
-	selfMembership := memberdomain.NewSelfMembership(membershipID, user.ID, tenantID, memberdomain.MEMBER_ROLE_VIEWER)
+	selfMembership := memberdomain.NewSelfMembership(membershipID, user.ID, tenantID, role)
 	if err := uc.membershipRepo.Save(ctx, selfMembership); err != nil {
 		return nil, errors.WrapInternal(err)
 	}

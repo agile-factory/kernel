@@ -47,13 +47,13 @@ func (h *AuditHandler) ListByTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only active admins of this tenant may read its audit trail.
+	// Only active admins (ROLE_ADMIN or ROLE_OWNER) of this tenant may read its audit trail.
 	callerMembership, err := h.membershipRepo.FindByUserAndTenant(r.Context(), callerID, tenantID)
 	if err != nil {
 		response.Error(w, errors.Forbidden("you do not have access to this tenant's audit logs"))
 		return
 	}
-	if !callerMembership.IsActive() || callerMembership.Role != memberdomain.MEMBER_ROLE_ADMIN {
+	if !callerMembership.IsActive() || !callerMembership.IsAdmin() {
 		response.Error(w, errors.Forbidden("only active admins can view audit logs"))
 		return
 	}

@@ -6,6 +6,9 @@ import "time"
 type MemberRole string
 
 const (
+	// MEMBER_ROLE_OWNER is assigned to the founding member of a tenant (the creator).
+	// An owner cannot be revoked by other admins and holds all administrative privileges.
+	MEMBER_ROLE_OWNER  MemberRole = "ROLE_OWNER"
 	MEMBER_ROLE_ADMIN  MemberRole = "ROLE_ADMIN"
 	MEMBER_ROLE_AGENT  MemberRole = "ROLE_AGENT"
 	MEMBER_ROLE_VIEWER MemberRole = "ROLE_VIEWER"
@@ -94,4 +97,15 @@ func (m *Membership) Revoke() error {
 // IsActive reports whether this membership grants access.
 func (m *Membership) IsActive() bool {
 	return m.Status == MEMBER_STATUS_ACTIVE
+}
+
+// IsAdmin reports whether this membership grants administrative privileges.
+// Both ROLE_OWNER and ROLE_ADMIN are considered administrators.
+func (m *Membership) IsAdmin() bool {
+	return m.Role == MEMBER_ROLE_OWNER || m.Role == MEMBER_ROLE_ADMIN
+}
+
+// IsOwner reports whether this membership is the founding member of the tenant.
+func (m *Membership) IsOwner() bool {
+	return m.Role == MEMBER_ROLE_OWNER
 }

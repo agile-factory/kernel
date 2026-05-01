@@ -47,7 +47,19 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	id := uuid.New().String()
 
-	user, err := h.registerUC.Execute(r.Context(), id, req.TenantID, req.Email, req.Password)
+	// Parse role, defaulting to ROLE_VIEWER for safety.
+	// ROLE_OWNER is accepted here but should only be used by the tenant creation flow.
+	role := memberdomain.MEMBER_ROLE_VIEWER
+	switch memberdomain.MemberRole(req.Role) {
+	case memberdomain.MEMBER_ROLE_OWNER:
+		role = memberdomain.MEMBER_ROLE_OWNER
+	case memberdomain.MEMBER_ROLE_ADMIN:
+		role = memberdomain.MEMBER_ROLE_ADMIN
+	case memberdomain.MEMBER_ROLE_AGENT:
+		role = memberdomain.MEMBER_ROLE_AGENT
+	}
+
+	user, err := h.registerUC.Execute(r.Context(), id, req.TenantID, req.Email, req.Password, role)
 	if err != nil {
 		response.Error(w, err)
 		return

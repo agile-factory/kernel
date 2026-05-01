@@ -39,13 +39,18 @@ func (uc *InviteMemberUseCase) Execute(ctx context.Context, inviterID, tenantID,
 		return nil, tenantdomain.ErrTenantNotFound
 	}
 
-	// Verify inviter is an active admin of this tenant
+	// Verify inviter is an active admin (ROLE_ADMIN or ROLE_OWNER) of this tenant
 	inviterMembership, err := uc.repo.FindByUserAndTenant(ctx, inviterID, tenantID)
 	if err != nil {
 		return nil, domain.ErrInsufficientMemberRole
 	}
-	if !inviterMembership.IsActive() || inviterMembership.Role != domain.MEMBER_ROLE_ADMIN {
+	if !inviterMembership.IsActive() || !inviterMembership.IsAdmin() {
 		return nil, domain.ErrInsufficientMemberRole
+	}
+
+	// ROLE_OWNER cannot be assigned via invitation — ownership is transferred separately
+	if role == domain.MEMBER_ROLE_OWNER {
+		return nil, domain.ErrCannotInviteAsOwner
 	}
 
 	// Check the invitee doesn't already have a membership

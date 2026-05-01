@@ -42,7 +42,7 @@ type Membership struct {
     ID        string
     UserID    string
     TenantID  string
-    Role      MemberRole   // ROLE_ADMIN | ROLE_AGENT | ROLE_VIEWER
+    Role      MemberRole   // ROLE_ADMIN | ROLE_OWNER| ROLE_AGENT | ROLE_VIEWER
     Status    MemberStatus // PENDING | ACTIVE | REVOKED
     InvitedBy string       // vide si auto-inscription
     JoinedAt  *time.Time   // nil jusqu'à Accept()
@@ -63,9 +63,9 @@ Deux méthodes de transition d'état :
 
 | Use Case | Règles métier |
 |---|---|
-| `InviteMemberUseCase` | Inviteur doit être ADMIN ACTIVE du tenant ; invité ne doit pas avoir de membership existant |
+| `InviteMemberUseCase` | Inviteur doit être ROLE_ADMIN **ou ROLE_OWNER** ACTIVE du tenant ; invité ne doit pas avoir de membership existant ; **ROLE_OWNER ne peut pas être assigné via invitation** (`ErrCannotInviteAsOwner`) |
 | `AcceptInviteUseCase` | Seul le destinataire (`UserID == callerID`) peut accepter sa propre invitation |
-| `RevokeMemberUseCase` | Seul un ADMIN ACTIVE peut révoquer ; un admin ne peut pas se révoquer lui-même |
+| `RevokeMemberUseCase` | Seul un ROLE_ADMIN ou ROLE_OWNER ACTIVE peut révoquer ; un admin ne peut pas se révoquer lui-même ; **ROLE_OWNER ne peut pas être révoqué** (`ErrCannotRevokeOwner`) |
 | `ListMembersUseCase` | Lecture paginée par tenant ou par user |
 
 ### 3. API HTTP

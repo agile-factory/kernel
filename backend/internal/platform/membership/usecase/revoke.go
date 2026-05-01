@@ -37,10 +37,15 @@ func (uc *RevokeMemberUseCase) Execute(ctx context.Context, membershipID, revoke
 		return nil, domain.ErrCannotRevokeOwnMembership
 	}
 
-	// Verify revoker is an active admin in the same tenant
+	// Verify revoker is an active admin (ROLE_ADMIN or ROLE_OWNER) in the same tenant
 	revokerMembership, err := uc.repo.FindByUserAndTenant(ctx, revokerID, membership.TenantID)
-	if err != nil || !revokerMembership.IsActive() || revokerMembership.Role != domain.MEMBER_ROLE_ADMIN {
+	if err != nil || !revokerMembership.IsActive() || !revokerMembership.IsAdmin() {
 		return nil, domain.ErrInsufficientMemberRole
+	}
+
+	// Owners cannot be revoked — they must transfer ownership first
+	if membership.IsOwner() {
+		return nil, domain.ErrCannotRevokeOwner
 	}
 
 	// State-machine transition (validates not-already-revoked internally)

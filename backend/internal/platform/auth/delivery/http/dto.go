@@ -9,6 +9,7 @@ type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	TenantID string `json:"tenantId"` // The tenant to join on registration
+	Role     string `json:"role"`     // Optional: ROLE_OWNER|ROLE_ADMIN|ROLE_AGENT|ROLE_VIEWER (default: ROLE_VIEWER)
 }
 
 // Validate checks the basic rules for the RegisterRequest.

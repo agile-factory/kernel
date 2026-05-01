@@ -17,8 +17,16 @@ var (
 	// ErrMembershipAlreadyRevoked is returned when Revoke() is called on an already-revoked membership.
 	ErrMembershipAlreadyRevoked = errors.BadRequest("Membership is already revoked")
 
-	// ErrInsufficientMemberRole is returned when the acting user lacks ROLE_ADMIN in the tenant.
+	// ErrInsufficientMemberRole is returned when the acting user lacks ROLE_ADMIN or ROLE_OWNER in the tenant.
 	ErrInsufficientMemberRole = errors.Forbidden("Only tenant admins can perform this action")
+
+	// ErrCannotRevokeOwner is returned when someone attempts to revoke a ROLE_OWNER membership.
+	// Ownership must be explicitly transferred before the owner's membership can be changed.
+	ErrCannotRevokeOwner = errors.Forbidden("The tenant owner cannot be revoked; transfer ownership first")
+
+	// ErrCannotInviteAsOwner is returned when an invitation specifies ROLE_OWNER as the target role.
+	// Ownership is established at tenant creation and transferred via a dedicated endpoint, never via invitation.
+	ErrCannotInviteAsOwner = errors.BadRequest("ROLE_OWNER cannot be assigned through an invitation")
 
 	// ErrCannotRevokeOwnMembership is returned when an admin tries to revoke themselves.
 	ErrCannotRevokeOwnMembership = errors.BadRequest("You cannot revoke your own membership")
