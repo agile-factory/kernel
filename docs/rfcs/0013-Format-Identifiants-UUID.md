@@ -4,7 +4,7 @@
 
 ---
 
-## **Status:** `PROPOSED`
+## **Status:** `DRAFT` — migration rétroactive décidée
 
 ---
 
@@ -51,13 +51,60 @@ id := uuid.Must(uuid.NewV7()).String()
 
 | Contexte | Format |
 |---|---|
-| Nouvelles tables (à partir de ce RFC) | UUID v7 |
-| Tables existantes (audit_logs, memberships, etc.) | UUID v4 maintenu (pas de migration rétroactive) |
-| IDs générés côté client (import, migration) | UUID v4 accepté (validation format uniquement) |
+| Nouvelles tables (dès ce RFC) | UUID v7 |
+| Tables existantes (audit_logs, memberships, users, tenants, etc.) | **Migration rétroactive vers UUID v7** (voir §Migration) |
+| IDs générés côté client (import, migration externe) | UUID v4 accepté (validation format uniquement) |
 
-### Migration des tables existantes
+### Migration rétroactive des tables existantes
 
-**Non recommandée en v1** : la migration des PKs existantes de v4 vers v7 est coûteuse et présente un risque élevé. Les tables existantes continuent avec UUID v4. Les nouvelles tables adoptent UUID v7 dès leur création.
+La migration s'applique à **toutes les tables existantes**, table par table dans l'ordre des dépendances FK.
+
+#### Étape 1 — Génération des nouveaux UUIDs v7
+
+Une migration `golang-migrate` ajoute une colonne temporaire `new_id UUID` sur chaque table. Les UUID v7 sont générés **côté Go** via `uuid.NewV7()` (pas de fonction native PostgreSQL pour UUID v7 encore disponible).
+
+#### Étape 2 — Mise à jour des clés étrangères
+
+Pour chaque table, les FK référençant l'ancienne PK sont mises à jour avant de swapper la PK :
+
+```sql
+-- Exemple pour memberships.user_id → users.id
+UPDATE memberships m
+   SET user_id = u.new_id
+  FROM users u
+ WHERE m.user_id = u.id;
+```
+
+#### Étape 3 — Swap de la PK et CLUSTER
+
+```sql
+-- Swap : new_id devient la nouvelle PK
+ALTER TABLE users DROP CONSTRAINT users_pkey;
+ALTER TABLE users RENAME COLUMN id TO old_id;
+ALTER TABLE users RENAME COLUMN new_id TO id;
+ALTER TABLE users ADD PRIMARY KEY (id);
+
+-- Réorganise physiquement les pages selon l'ordre UUID v7
+CLUSTER users USING users_pkey;
+ANALYZE users;
+```
+
+#### Étape 4 — Nettoyage
+
+```sql
+ALTER TABLE users DROP COLUMN old_id;
+```
+
+**Ordre de migration (dépendances FK) :**
+
+1. `users` (racine)
+2. `tenants`
+3. `memberships` (FK → users + tenants)
+4. `audit_logs` (FK → users + tenants)
+5. `subscriptions` (FK → tenants)
+6. `tenant_customers` / `tenant_invoices` (FK → tenants)
+
+**Note JWT :** après la migration, les JWTs existants contiennent l'ancien `user_id` (UUID v4). Faire une rotation du secret JWT ou incrémenter `token_version` pour invalider les sessions actives.
 
 ---
 
@@ -79,7 +126,7 @@ UUID v7 expose le timestamp de création dans l'identifiant. Pour des entités s
 ### UUID v4 (status quo)
 - ✅ Déjà en place, aucun changement nécessaire
 - ❌ Fragmentation d'index croissante avec le volume
-- **Verdict : maintenu pour les tables existantes uniquement**
+- **Verdict : abandonné** — migration rétroactive vers UUID v7 décidée pour toutes les tables
 
 ### ULID (Universally Unique Lexicographically Sortable Identifier)
 - ✅ Trié lexicographiquement, human-friendly
@@ -103,7 +150,6 @@ UUID v7 expose le timestamp de création dans l'identifiant. Pour des entités s
 ## **Open Questions**
 
 1. Faut-il exposer l'UUID v7 directement dans l'API ou utiliser un identifiant court pour les URLs (ex: `nanoid`) ?
-2. Le timestamp dans l'UUID v7 représente-t-il un risque RGPD pour certains types de données ?
 
 ---
 

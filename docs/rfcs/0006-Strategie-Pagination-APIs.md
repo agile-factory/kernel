@@ -1,10 +1,10 @@
 # _RFC #0006:_ Stratégie de Pagination des APIs de Liste
 
-**date:** `2026 May 01`
+**date:** `2026 May 01` — **mis à jour :** `2026 May 01`
 
 ---
 
-## **Status:** `ACCEPTED`
+## **Status:** `ACCEPTED` — v2 `IMPLEMENTED`
 
 ---
 
@@ -28,11 +28,12 @@ Sans convention établie dès le départ :
 
 Les endpoints existants concernés :
 
-| Endpoint | Cardinalité | Stratégie v1 |
-|---|---|---|
-| `GET /memberships/tenant/{id}` | Faible (\<200) | In-memory |
-| `GET /memberships/user/{id}` | Très faible (\<20) | In-memory |
-| `GET /tenants/{id}/audit-logs` | Haute (illimitée) | SQL |
+| Endpoint | Cardinalité | Stratégie v1 | Stratégie v2 |
+|---|---|---|---|
+| `GET /memberships/tenant/{id}` | Faible (<200) | In-memory | — (cardinalité bornée) |
+| `GET /memberships/user/{id}` | Très faible (<20) | In-memory | — (cardinalité bornée) |
+| `GET /tenants/{id}/audit-logs` | Haute (illimitée) | SQL `LIMIT/OFFSET` | **Cursor-based (keyset)** |
+| `GET /audit-logs` | Haute (illimitée) | SQL `LIMIT/OFFSET` | **Cursor-based (keyset)** |
 
 ---
 
@@ -98,29 +99,45 @@ func applyPage(all []*domain.Membership, limit, offset int) []*domain.Membership
 
 `total` = `len(all)` (taille de la collection complète en mémoire).
 
-### 4. Évolution vers Cursor-Based (prévue)
+### 4. Cursor-Based (implémenté en v2)
 
-Pour les tables à très haute cardinalité (>10k lignes), `OFFSET` dégrade les performances (full scan jusqu'à l'offset). La migration vers cursor-based est planifiée en v2 :
+Pour les tables à très haute cardinalité (>10k lignes), `OFFSET` dégrade les performances (full scan jusqu'à l'offset). La pagination cursor-based est **implémentée en v2** sur les deux endpoints d'audit (`/api/v2/...`) :
 
 ```json
 {
     "data": [...],
-    "next_cursor": "eyJpZCI6IjEyMyIsIm9jY3VycmVkX2F0IjoiMjAyNiJ9",
-    "has_more": true
+    "total":       -1,
+    "limit":       50,
+    "offset":      0,
+    "next_cursor": "eyJvY2N1cnJlZF9hdCI6Ii4uLiIsImlkIjoiLi4uIn0=",
+    "has_more":    true
 }
 ```
 
-L'enveloppe actuelle est **compatible** avec cette évolution (ajout de `next_cursor` sans retirer `offset`).
+**Mécanique :**
+- Le curseur encode `{ occurred_at, id }` en Base64url (opaque pour les clients).
+- Le keyset SQL utilise `WHERE (occurred_at, id) < ($N::timestamptz, $M::uuid)` avec un index composite `(tenant_id, occurred_at DESC, id ASC)`.
+- `total = -1` est une valeur sentinelle signalant le mode cursor (pas de `COUNT(*)`).
+- La technique `limit+1` détecte `has_more` sans requête supplémentaire.
+- Les routes v1 (`/api/v1/...`) restent intactes — pas de breaking change.
+
+**Routes exposées :**
+```
+GET /api/v2/tenants/{tenantId}/audit-logs?limit=50&after=<cursor>
+GET /api/v2/audit-logs?limit=50&after=<cursor>
+```
+
+L'enveloppe v1 reste **compatible** : `next_cursor` et `has_more` ont été ajoutés sans retirer `offset` ni `total`.
 
 ---
 
 ## **Drawbacks**
 
-### `COUNT(*)` coûteux sur grandes tables
-Pour retourner `total`, une requête `COUNT(*)` est nécessaire. Sur des tables de millions de lignes, cela peut être lent sans optimisations (index covering, approximate count via `pg_class.reltuples`).
+### `COUNT(*)` coûteux sur grandes tables (v1 uniquement)
+Pour retourner `total`, une requête `COUNT(*)` est nécessaire en v1. Résolu en v2 : `total = -1`, technique `limit+1` pour `has_more`.
 
-### `OFFSET` dégradant
-Au-delà de ~10k lignes, PostgreSQL doit scanner et ignorer `OFFSET` lignes. Planifié pour v2 : cursor-based pour les tables critiques.
+### `OFFSET` dégradant (v1 uniquement)
+Au-delà de ~10k lignes, PostgreSQL scanne et ignore `OFFSET` lignes. **Résolu en v2** par keyset sur `(occurred_at DESC, id ASC)` avec index composite.
 
 ### Pagination in-memory charge toute la collection
 La stratégie B charge toujours l'ensemble des données en mémoire pour ensuite les slicer. Acceptable tant que la cardinalité est connue comme faible et bornée.
@@ -134,12 +151,12 @@ La stratégie B charge toujours l'ensemble des données en mémoire pour ensuite
 - ✅ Stable aux insertions concurrentes (offset peut décaler les pages)
 - ❌ Complexité d'implémentation plus élevée
 - ❌ Pas de navigation directe vers une page arbitraire
-- **Verdict : différé** — introduit en v2 pour les collections à haute cardinalité
+- **Verdict : différé en v1, implémenté en v2** — routes `/api/v2/audit-logs` et `/api/v2/tenants/{id}/audit-logs`
 
 ### Keyset pagination (`WHERE id > :last_id ORDER BY id`)
 - ✅ Plus simple que cursor-based, performances constantes
 - ❌ Nécessite un ordre total stable (UUID v7 ou composite `created_at + id`)
-- **Verdict : différé** — recommandé si migration vers UUID v7 (voir Open Questions RFC-0002)
+- **Verdict : implémenté en v2** — keyset composite `(occurred_at DESC, id ASC)` sans dépendance à UUID v7 (RFC-0013 encore `PROPOSED`)
 
 ### Pas d'enveloppe (retourner un tableau nu `[]`)
 - ✅ Réponse plus simple
@@ -158,7 +175,8 @@ La stratégie B charge toujours l'ensemble des données en mémoire pour ensuite
 
 1. Faut-il normaliser le nom `data` ou le laisser sémantique (`memberships`, `logs`) ? Actuellement `data` est utilisé pour l'uniformité.
 2. Faut-il inclure `page` (numéro de page calculé) en plus de `offset` pour les clients qui pensent en pages ?
-3. Quand migrer `audit_logs` vers cursor-based ? Seuil : 100k lignes en prod ?
+3. ~~Quand migrer `audit_logs` vers cursor-based ?~~ **Résolu** : implémenté en v2 sur `/api/v2/audit-logs`.
+4. Faut-il ajouter des filtres (`?action=`, `?actor_id=`) en v2 des endpoints cursor-based ? Différé à v2.1.
 
 ---
 

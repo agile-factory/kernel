@@ -90,7 +90,8 @@ func (c *Container) setupRoutes(db *pgxpool.Pool) {
 
 	// ── Audit Platform (read model) ───────────────────────────────────────────
 	auditHandler := audithttp.NewAuditHandler(listAuditUC, membershipRepo)
-	audithttp.RegisterRoutes(c.mux, auditHandler)
+	auditHandlerV2 := audithttp.NewAuditHandlerV2(listAuditUC, membershipRepo)
+	audithttp.RegisterRoutes(c.mux, auditHandler, auditHandlerV2)
 
 	// TODO: Register module routes here (billing, notifications, etc.)
 }

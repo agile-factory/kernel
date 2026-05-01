@@ -1,10 +1,10 @@
 # _ADR #0009:_ Piste d'Audit Best-Effort avec `platform/audit`
 
-**date:** `2026 May 01`
+**date:** `2026 May 01` — **mis à jour :** `2026 May 01`
 
 ---
 
-## **Status:** `IMPLEMENTED`
+## **Status:** `IMPLEMENTED` — v2 cursor `IMPLEMENTED`
 
 ---
 
@@ -40,15 +40,31 @@ func (uc *LogEventUseCase) Execute(ctx context.Context, params LogEventParams) {
 
 **Un échec d'audit ne propage pas d'erreur vers l'appelant et ne rollback jamais l'opération métier.**
 
-### Stratégie de lecture : **Admin-only, paginé**
+### Stratégie de lecture : **Admin-only, paginé (v1 + v2)**
 
-La lecture s'effectue à deux niveaux d'isolation :
+La lecture s'effectue à deux niveaux d'isolation, chacun exposé en v1 (offset) et v2 (cursor) :
 
-1. **Vue Tenant** (`GET /api/v1/tenants/{tenantId}/audit-logs`) :
+| Version | Endpoint | Mécanique | Remarque |
+|---|---|---|---|
+| v1 | `GET /api/v1/tenants/{tenantId}/audit-logs` | `LIMIT/OFFSET` + `COUNT(*)` | Maintenu, stable |
+| v2 | `GET /api/v2/tenants/{tenantId}/audit-logs` | Keyset cursor `(occurred_at, id)` | Haute performance |
+| v1 | `GET /api/v1/audit-logs` | `LIMIT/OFFSET` + `COUNT(*)` | Maintenu, stable |
+| v2 | `GET /api/v2/audit-logs` | Keyset cursor `(occurred_at, id)` | Super-admins only |
+
+**Gardes d'autorisation (identiques v1/v2) :**
+
+1. **Vue Tenant** (`/tenants/{tenantId}/audit-logs`) :
    Seul un utilisateur avec `ROLE_OWNER` ou `ROLE_ADMIN` et un membership `ACTIVE` dans ce tenant peut lire ses logs. La vérification est faite dans le handler via le `MembershipRepository.FindByUserAndTenant()`.
 
-2. **Vue Globale** (`GET /api/v1/audit-logs`) :
+2. **Vue Globale** (`/audit-logs`) :
    Réservée aux super-administrateurs de la plateforme. La vérification se base sur le rôle du JWT principal injecté dans le contexte (`kernelauth.IsPlatformAdmin()`).
+
+**Détails d'implémentation v2 :**
+- Curseur opaque `base64url(json{ occurred_at, id })` — jamais construit côté client
+- Keyset SQL : `WHERE (occurred_at, id) < ($N::timestamptz, $M::uuid) ORDER BY occurred_at DESC, id ASC`
+- Technique `limit+1` pour détecter `has_more` sans `COUNT(*)`
+- `total = -1` dans la réponse v2 (sentinelle mode cursor)
+- Index composite ajouté via migration `202605010005` : `(tenant_id, occurred_at DESC, id ASC)` et `(occurred_at DESC, id ASC)`
 
 ---
 
@@ -81,8 +97,11 @@ La lecture s'effectue à deux niveaux d'isolation :
 - La plateforme est injectée en tant que `*LogEventUseCase` sans coupler les use cases à l'infrastructure d'audit
 - L'endpoint de lecture est accessible en Phase 2 sans modifier le domaine
 - JSONB metadata permet d'enrichir les logs sans migration de schéma
+- **v2** : pagination cursor-based sans `COUNT(*)` ni dégradation `OFFSET` — performances constantes même à plusieurs millions de lignes
+- **v2** : routes `/api/v2/` additives, aucun breaking change sur les clients v1
 
 ### **Cons**
 - Best-effort = possibilité de logs manquants en cas de panne DB persistante
 - Les erreurs d'audit silencieuses doivent être monitorées séparément (métriques, alertes)
 - Pas de garantie d'ordre des événements (OccurredAt peut différer du commit de l'opération)
+- **v2** : `total = -1` est une sentinelle — les clients qui affichent "page X sur N" doivent utiliser la v1 ou adapter leur UI

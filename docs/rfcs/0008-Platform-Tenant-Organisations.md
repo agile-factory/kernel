@@ -108,9 +108,6 @@ La table `tenants` est intentionnellement minimale en v1. Les extensions prévue
 
 ## **Drawbacks**
 
-### Unicité du slug à l'échelle globale
-Le slug est unique globalement (pas par produit). Si le socle héberge plusieurs SaaS distincts, deux SaaS différents ne peuvent pas avoir un tenant `acme-corp`. Ce scénario est hors scope pour la v1.
-
 ### Pas de désactivation douce
 En v1, `is_active = false` désactive le tenant mais ne prévient pas les utilisateurs connectés (les tokens JWT existants restent valides jusqu'à expiration). Une invalidation active nécessiterait une blacklist de tokens.
 

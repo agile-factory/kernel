@@ -1,10 +1,10 @@
 # _RFC #0005:_ Platform `audit` — Piste d'Audit Transversale
 
-**date:** `2026 May 01`
+**date:** `2026 May 01` — **mis à jour :** `2026 May 01`
 
 ---
 
-## **Status:** `ACCEPTED`
+## **Status:** `ACCEPTED` — v2 lecture cursor `IMPLEMENTED`
 
 ---
 
@@ -99,9 +99,11 @@ func (uc *LogEventUseCase) Execute(ctx context.Context, params LogEventParams) {
 
 **Principe** : un échec d'écriture de l'audit ne propage jamais d'erreur vers l'opération métier parente. L'audit est un enrichissement, pas un prérequis.
 
-### 4. Stratégie de lecture : Admin-only, paginé
+### 4. Stratégie de lecture : Admin-only, paginé (v1 + v2)
 
-Deux endpoints sont exposés pour lire les logs d'audit :
+Quatre endpoints sont exposés pour lire les logs d'audit :
+
+#### v1 — offset-based (stable, maintenu)
 
 1. **Au niveau d'un tenant** :
 ```
@@ -115,7 +117,47 @@ GET /api/v1/audit-logs?limit=50&offset=0
 ```
 **Garde d'autorisation** : le handler vérifie que le caller a le rôle global de plateforme `ROLE_ADMIN` (injecté dans le contexte depuis le payload JWT via le middleware `Auth` et vérifié par `kernelauth.IsPlatformAdmin()`).
 
-**Réponse** :
+#### v2 — cursor-based (ajouté en v2, hautes performances)
+
+3. **Au niveau d'un tenant** :
+```
+GET /api/v2/tenants/{tenantId}/audit-logs?limit=50&after=<cursor>
+```
+
+4. **Au niveau global (Super-Admin)** :
+```
+GET /api/v2/audit-logs?limit=50&after=<cursor>
+```
+
+**Gardes d'autorisation identiques à v1.** Seul le mécanisme de pagination diffère.
+
+**Réponse v2 :**
+```json
+{
+    "data": [
+        {
+            "id": "...",
+            "action": "MEMBER_INVITED",
+            "actorId": "...",
+            "targetType": "membership",
+            "targetId": "...",
+            "metadata": { "invitee_id": "...", "role": "ROLE_AGENT" },
+            "occurredAt": "2026-05-01T04:00:00Z"
+        }
+    ],
+    "total":       -1,
+    "limit":       50,
+    "offset":      0,
+    "next_cursor": "eyJvY2N1cnJlZF9hdCI6Ii4uLiIsImlkIjoiLi4uIn0=",
+    "has_more":    true
+}
+```
+
+- `total = -1` : sentinelle signalant le mode cursor (aucun `COUNT(*)` exécuté)
+- `next_cursor` : absent (omité du JSON) sur la dernière page
+- `has_more` : `false` sur la dernière page
+
+**Réponse v1 (inchangée) :**
 ```json
 {
     "data": [

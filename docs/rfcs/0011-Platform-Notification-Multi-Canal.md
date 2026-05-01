@@ -4,7 +4,7 @@
 
 ---
 
-## **Status:** `PROPOSED`
+## **Status:** `DRAFT`
 
 ---
 
@@ -59,6 +59,7 @@ type Event struct {
 |---|---|---|
 | **Email** | Invitation, vérification, reset password | SMTP / Resend / Mailgun |
 | **SMS** | OTP, alertes critiques | Twilio / Orange SMS API |
+| **WhatsApp** | Notifications riches, OTP, rappels | WhatsApp Business API (Meta) / Twilio WhatsApp |
 | **In-App** | Notifications temps réel dans l'UI | WebSocket / SSE |
 | **Push** | Mobile (iOS/Android) | Firebase FCM |
 
@@ -86,7 +87,7 @@ CREATE TABLE notification_logs (
     tenant_id    UUID REFERENCES tenants(id),
     recipient_id UUID REFERENCES users(id),
     event_type   VARCHAR(100) NOT NULL,
-    channel      VARCHAR(20)  NOT NULL, -- 'email', 'sms', 'in_app'
+    channel      VARCHAR(20)  NOT NULL, -- 'email', 'sms', 'whatsapp', 'in_app', 'push'
     status       VARCHAR(20)  NOT NULL DEFAULT 'SENT', -- SENT | FAILED | PENDING
     payload      JSONB,
     sent_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -143,6 +144,7 @@ uc.emailService.Send(ctx, "invitation", user.Email, payload)
 1. Faut-il un endpoint `GET /notifications` pour l'in-app (notifications non lues) dès la v1 ?
 2. Orange SMS API ou Twilio pour le marché sénégalais ?
 3. Gestion des préférences de notification (un utilisateur peut désactiver les SMS) ?
+4. **WhatsApp** : Meta WhatsApp Business API (via Cloud API directe) ou Twilio WhatsApp sandbox ? La Cloud API directe évite une intermédiaire mais nécessite un numéro dédié vérifié par Meta.
 
 ---
 

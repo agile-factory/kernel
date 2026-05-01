@@ -1,10 +1,10 @@
 # _ADR #0010:_ Pagination Uniforme `{ data, total, limit, offset }` sur les Endpoints de Liste
 
-**date:** `2026 May 01`
+**date:** `2026 May 01` — **mis à jour :** `2026 May 01`
 
 ---
 
-## **Status:** `ACCEPTED`
+## **Status:** `ACCEPTED` — v2 cursor `IMPLEMENTED`
 
 ---
 
@@ -37,11 +37,14 @@ Le projet utilise deux contextes différents pour les listes :
 
 **Deux stratégies selon la cardinalité :**
 
-| Endpoint | Stratégie | Justification |
-|---|---|---|
-| `GET /audit-logs` | SQL `LIMIT/OFFSET` (repo) | Cardinalité haute, croissance illimitée |
-| `GET /memberships/tenant/{id}` | In-memory slice | Cardinalité typiquement \<100 |
-| `GET /memberships/user/{id}` | In-memory slice | Cardinalité typiquement \<20 |
+| Endpoint | Stratégie v1 | Stratégie v2 | Justification |
+|---|---|---|---|
+| `GET /api/v1/audit-logs` | SQL `LIMIT/OFFSET` (repo) | — | v1 maintenue |
+| `GET /api/v2/audit-logs` | — | **Cursor keyset** | Cardinalité haute, croissance illimitée |
+| `GET /api/v1/tenants/{id}/audit-logs` | SQL `LIMIT/OFFSET` | — | v1 maintenue |
+| `GET /api/v2/tenants/{id}/audit-logs` | — | **Cursor keyset** | Cardinalité haute, croissance illimitée |
+| `GET /memberships/tenant/{id}` | In-memory slice | — | Cardinalité typiquement <100 |
+| `GET /memberships/user/{id}` | In-memory slice | — | Cardinalité typiquement <20 |
 
 Les modules futurs (billing, notifications) **doivent implémenter la pagination SQL au niveau du repository dès le départ**.
 
@@ -54,12 +57,13 @@ Les modules futurs (billing, notifications) **doivent implémenter la pagination
 - ✅ Stable aux insertions (offset peut décaler les pages)
 - ❌ Plus complexe à implémenter et à utiliser côté client
 - ❌ Incompatible avec les sauts de page directs
-- **Verdict : différé** — à adopter pour les endpoints à très haute cardinalité (>10k lignes)
+- **Verdict : implémenté en v2** — routes `/api/v2/audit-logs` et `/api/v2/tenants/{id}/audit-logs`.
+  Curseur opaque `base64url(json{occurred_at, id})`, keyset SQL sur `(occurred_at DESC, id ASC)`, `total=-1` sentinelle, technique `limit+1` pour `has_more`.
 
 ### Keyset pagination (`WHERE id > :last_id`)
 - ✅ Performances constantes, pas de dégradation avec l'offset
 - ❌ Nécessite un ordre total stable (UUID v7 ou `created_at + id`)
-- **Verdict : différé** — recommandé pour la v2 des audit_logs
+- **Verdict : implémenté en v2** — keyset composite `(occurred_at DESC, id ASC)` sur `audit_logs`, sans dépendance à UUID v7
 
 ### Retourner un tableau nu `[]` sans enveloppe
 - ✅ Plus simple
@@ -78,6 +82,6 @@ Les modules futurs (billing, notifications) **doivent implémenter la pagination
 - Compatible avec une migration future vers cursor-based (ajout de `next_cursor` sans breaking change)
 
 ### **Cons**
-- `COUNT(*)` implicite dans `total` peut être coûteux sur de grandes tables (atténué par les index)
-- La pagination in-memory charge toujours l'ensemble des données (acceptable pour cardinalités \<100)
-- `OFFSET` dégrade les performances au-delà de ~10k lignes (plan prévu : cursor-based en v2)
+- `COUNT(*)` implicite dans `total` peut être coûteux sur de grandes tables (atténué par les index) — **éliminé en v2** (`total = -1`)
+- La pagination in-memory charge toujours l'ensemble des données (acceptable pour cardinalités <100)
+- `OFFSET` dégrade les performances au-delà de ~10k lignes — **résolu en v2** par keyset sur `(occurred_at DESC, id ASC)` + index composite
