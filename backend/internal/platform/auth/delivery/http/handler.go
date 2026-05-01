@@ -3,23 +3,32 @@ package http
 import (
 	"encoding/json"
 	"net/http"
-	"github.com/google/uuid"
+
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/usecase"
+	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
+	memberusecase "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/usecase"
+	"github.com/google/uuid"
 )
 
 // AuthHandler handles HTTP requests for authentication.
 type AuthHandler struct {
 	registerUC *usecase.RegisterUseCase
 	loginUC    *usecase.LoginUseCase
+	listUC     *memberusecase.ListMembersUseCase
 }
 
 // NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(registerUC *usecase.RegisterUseCase, loginUC *usecase.LoginUseCase) *AuthHandler {
+func NewAuthHandler(
+	registerUC *usecase.RegisterUseCase,
+	loginUC *usecase.LoginUseCase,
+	listUC *memberusecase.ListMembersUseCase,
+) *AuthHandler {
 	return &AuthHandler{
 		registerUC: registerUC,
 		loginUC:    loginUC,
+		listUC:     listUC,
 	}
 }
 
@@ -36,7 +45,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For a real app, generate a secure UUID.
 	id := uuid.New().String()
 
 	user, err := h.registerUC.Execute(r.Context(), id, req.TenantID, req.Email, req.Password)
@@ -45,14 +53,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// We could return a token here if auto-login is desired,
-	// but standard register often just returns the user details.
+	// Fetch the memberships created during registration
+	memberships, _ := h.listUC.ByUser(r.Context(), user.ID)
 	userDTO := UserDTO{
-		ID:       user.ID,
-		Email:    user.Email.String(),
-		Role:     string(user.Role),
-		TenantID: user.TenantID,
-		Token: "a generer plus tard",
+		ID:          user.ID,
+		Email:       user.Email.String(),
+		Role:        string(user.Role),
+		Memberships: toMembershipSummaries(memberships),
 	}
 
 	response.JSON(w, http.StatusCreated, userDTO)
@@ -77,15 +84,32 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch the user's current memberships for the response
+	memberships, _ := h.listUC.ByUser(r.Context(), user.ID)
+
 	resp := AuthResponse{
 		Token: token,
 		User: UserDTO{
-			ID:       user.ID,
-			Email:    user.Email.String(),
-			Role:     string(user.Role),
-			TenantID: user.TenantID,
+			ID:          user.ID,
+			Email:       user.Email.String(),
+			Role:        string(user.Role),
+			Memberships: toMembershipSummaries(memberships),
 		},
 	}
 
 	response.JSON(w, http.StatusOK, resp)
+}
+
+// toMembershipSummaries converts domain memberships to compact DTO slices.
+func toMembershipSummaries(memberships []*memberdomain.Membership) []MembershipSummary {
+	result := make([]MembershipSummary, len(memberships))
+	for i, m := range memberships {
+		result[i] = MembershipSummary{
+			MembershipID: m.ID,
+			TenantID:     m.TenantID,
+			Role:         string(m.Role),
+			Status:       string(m.Status),
+		}
+	}
+	return result
 }

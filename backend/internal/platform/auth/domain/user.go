@@ -14,9 +14,9 @@ const (
 )
 
 // User represents the central authentication entity.
+// Tenant membership is tracked separately in the memberships table.
 type User struct {
 	ID             string
-	TenantID       string
 	Email          Email
 	HashedPassword string
 	Role           Role
@@ -25,11 +25,10 @@ type User struct {
 }
 
 // NewUser creates a new User instance.
-func NewUser(id, tenantId string, email Email, hashedPassword string, role Role) *User {
+func NewUser(id string, email Email, hashedPassword string, role Role) *User {
 	now := time.Now()
 	return &User{
 		ID:             id,
-		TenantID:       tenantId,
 		Email:          email,
 		HashedPassword: hashedPassword,
 		Role:           role,
@@ -37,3 +36,4 @@ func NewUser(id, tenantId string, email Email, hashedPassword string, role Role)
 		UpdatedAt:      now,
 	}
 }
+

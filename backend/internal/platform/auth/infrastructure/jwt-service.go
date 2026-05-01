@@ -18,13 +18,12 @@ type jwtHeader struct {
 	Typ string `json:"typ"`
 }
 
-// jwtPayload represents our specific JWT claims
+// jwtPayload represents our specific JWT claims.
 type jwtPayload struct {
-	Sub      string `json:"sub"`      // User ID
-	TenantID string `json:"tenantId"` // Tenant ID
-	Role     string `json:"role"`     // User Role
-	Exp      int64  `json:"exp"`      // Expiration time
-	Iat      int64  `json:"iat"`      // Issued at
+	Sub  string `json:"sub"`  // User ID
+	Role string `json:"role"` // User's platform role
+	Exp  int64  `json:"exp"`  // Expiration time
+	Iat  int64  `json:"iat"`  // Issued at
 }
 
 // JWTService implements TokenGenerator and TokenValidator using stdlib.
@@ -49,11 +48,10 @@ func (s *JWTService) GenerateToken(user *domain.User) (string, error) {
 
 	now := time.Now()
 	payload := jwtPayload{
-		Sub:      user.ID,
-		TenantID: user.TenantID,
-		Role:     string(user.Role),
-		Exp:      now.Add(s.tokenLifespan).Unix(),
-		Iat:      now.Unix(),
+		Sub:  user.ID,
+		Role: string(user.Role),
+		Exp:  now.Add(s.tokenLifespan).Unix(),
+		Iat:  now.Unix(),
 	}
 	payloadBytes, _ := json.Marshal(payload)
 	encodedPayload := base64.RawURLEncoding.EncodeToString(payloadBytes)
@@ -63,6 +61,7 @@ func (s *JWTService) GenerateToken(user *domain.User) (string, error) {
 
 	return unsignedToken + "." + signature, nil
 }
+
 
 // ValidateToken validates the JWT and returns the User ID (Sub).
 func (s *JWTService) ValidateToken(token string) (string, error) {
