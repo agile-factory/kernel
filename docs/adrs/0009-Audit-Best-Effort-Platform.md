@@ -14,7 +14,7 @@ Un SaaS multi-tenant a besoin de traçabilité des actions sensibles : qui a inv
 
 Deux questions de design se posent :
 1. **Où persister** : dans la même transaction que l'opération principale, ou de manière indépendante ?
-2. **Qui peut lire** : tout utilisateur ? Seulement les admins du tenant ?
+2. **Qui peut lire** : tout utilisateur ? Seulement les admins du tenant ? Quid des super-admins de la plateforme ?
 
 ---
 
@@ -42,9 +42,13 @@ func (uc *LogEventUseCase) Execute(ctx context.Context, params LogEventParams) {
 
 ### Stratégie de lecture : **Admin-only, paginé**
 
-`GET /api/v1/tenants/{tenantId}/audit-logs?limit=50&offset=0`
+La lecture s'effectue à deux niveaux d'isolation :
 
-Seul un utilisateur avec `ROLE_ADMIN` et un membership `ACTIVE` dans le tenant peut lire ses logs. La vérification est faite dans le handler via le `MembershipRepository`.
+1. **Vue Tenant** (`GET /api/v1/tenants/{tenantId}/audit-logs`) :
+   Seul un utilisateur avec `ROLE_OWNER` ou `ROLE_ADMIN` et un membership `ACTIVE` dans ce tenant peut lire ses logs. La vérification est faite dans le handler via le `MembershipRepository.FindByUserAndTenant()`.
+
+2. **Vue Globale** (`GET /api/v1/audit-logs`) :
+   Réservée aux super-administrateurs de la plateforme. La vérification se base sur le rôle du JWT principal injecté dans le contexte (`kernelauth.IsPlatformAdmin()`).
 
 ---
 

@@ -27,3 +27,15 @@ func (uc *ListAuditLogsUseCase) ByTenant(ctx context.Context, tenantID string, l
 	}
 	return uc.repo.ListByTenant(ctx, tenantID, limit, offset)
 }
+
+// All returns paginated audit logs across all tenants.
+// Intended for platform super-admins only.
+func (uc *ListAuditLogsUseCase) All(ctx context.Context, limit, offset int) ([]*domain.AuditLog, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	return uc.repo.ListAll(ctx, limit, offset)
+}

@@ -44,27 +44,28 @@ func Auth(jwtSecret string) func(http.Handler) http.Handler {
 			}
 
 			token := strings.TrimPrefix(authHeader, "Bearer ")
-			userID, err := validateJWT(token, secretKey)
+			payload, err := validateJWT(token, secretKey)
 			if err != nil {
 				response.Error(w, errors.Unauthorized("invalid or expired token"))
 				return
 			}
 
 			// Inject into context and header for downstream compatibility.
-			ctx := kernelauth.WithUserID(r.Context(), userID)
+			ctx := kernelauth.WithUserID(r.Context(), payload.Sub)
+			ctx = kernelauth.WithPlatformRole(ctx, payload.Role)
 			r = r.WithContext(ctx)
-			r.Header.Set("X-User-ID", userID)
+			r.Header.Set("X-User-ID", payload.Sub)
 
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-// validateJWT parses and verifies an HS256 JWT, returning the subject claim (user ID).
-func validateJWT(token string, secretKey []byte) (string, error) {
+// validateJWT parses and verifies an HS256 JWT, returning the payload.
+func validateJWT(token string, secretKey []byte) (*jwtPayload, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return "", errors.Unauthorized("invalid token format")
+		return nil, errors.Unauthorized("invalid token format")
 	}
 
 	// Verify signature
@@ -74,23 +75,23 @@ func validateJWT(token string, secretKey []byte) (string, error) {
 	expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 
 	if !hmac.Equal([]byte(parts[2]), []byte(expectedSig)) {
-		return "", errors.Unauthorized("invalid token signature")
+		return nil, errors.Unauthorized("invalid token signature")
 	}
 
 	// Decode payload
 	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return "", errors.Unauthorized("invalid token payload encoding")
+		return nil, errors.Unauthorized("invalid token payload encoding")
 	}
 
 	var payload jwtPayload
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		return "", errors.Unauthorized("invalid token payload format")
+		return nil, errors.Unauthorized("invalid token payload format")
 	}
 
 	if time.Now().Unix() > payload.Exp {
-		return "", errors.Unauthorized("token expired")
+		return nil, errors.Unauthorized("token expired")
 	}
 
-	return payload.Sub, nil
+	return &payload, nil
 }

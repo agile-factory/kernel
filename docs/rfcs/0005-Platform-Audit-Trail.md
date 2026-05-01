@@ -12,12 +12,13 @@
 
 Ce RFC définit la plateforme `audit`, brique SaaS transversale qui enregistre une trace immuable des actions significatives effectuées dans le système.
 
-La plateforme est **push-only** en Phase 1 (écriture best-effort par tous les use cases concernés) et expose un endpoint de lecture paginé en Phase 2 (ROLE_ADMIN uniquement).
+La plateforme est **push-only** en Phase 1 (écriture best-effort par tous les use cases concernés) et expose des endpoints de lecture paginés en Phase 2 (pour les admins de tenant et les super-admins de la plateforme).
 
 ```
 Use Case métier → LogEventUseCase.Execute() → audit_logs (DB)
                                                       ↓
-                              GET /tenants/{id}/audit-logs (Phase 2)
+                              GET /tenants/{id}/audit-logs (Admins Tenant)
+                              GET /audit-logs              (Super Admins)
 ```
 
 ---
@@ -56,9 +57,9 @@ platform/audit/
 │   ├── list_audit_logs.go ← ListAuditLogsUseCase (paginé, max 200)
 │   └── params.go          ← LogEventParams
 └── delivery/http/
-    ├── handler.go         ← AuditHandler (GET avec garde ROLE_ADMIN)
+    ├── handler.go         ← AuditHandler (GET avec gardes ROLE_ADMIN/OWNER et Platform Admin)
     ├── dto.go             ← AuditLogResponse, AuditLogListResponse
-    └── routes.go          ← GET /api/v1/tenants/{tenantId}/audit-logs
+    └── routes.go          ← GET /api/v1/tenants/{tenantId}/audit-logs & GET /api/v1/audit-logs
 ```
 
 ### 2. Aggregate AuditLog
@@ -100,11 +101,19 @@ func (uc *LogEventUseCase) Execute(ctx context.Context, params LogEventParams) {
 
 ### 4. Stratégie de lecture : Admin-only, paginé
 
+Deux endpoints sont exposés pour lire les logs d'audit :
+
+1. **Au niveau d'un tenant** :
 ```
 GET /api/v1/tenants/{tenantId}/audit-logs?limit=50&offset=0
 ```
+**Garde d'autorisation** : le handler vérifie via `MembershipRepository.FindByUserAndTenant()` que le caller est `ROLE_ADMIN` ou `ROLE_OWNER` et qu'il est `ACTIVE` dans le tenant demandé.
 
-**Garde d'autorisation** : le handler vérifie via `MembershipRepository.FindByUserAndTenant()` que le caller est `ROLE_ADMIN` et `ACTIVE` dans le tenant demandé.
+2. **Au niveau global (Super-Admin)** :
+```
+GET /api/v1/audit-logs?limit=50&offset=0
+```
+**Garde d'autorisation** : le handler vérifie que le caller a le rôle global de plateforme `ROLE_ADMIN` (injecté dans le contexte depuis le payload JWT via le middleware `Auth` et vérifié par `kernelauth.IsPlatformAdmin()`).
 
 **Réponse** :
 ```json

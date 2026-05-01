@@ -16,4 +16,13 @@ const (
 		ORDER  BY occurred_at DESC
 		LIMIT  $2 OFFSET $3
 	`
+
+	queryListAll = `
+		SELECT id, COALESCE(tenant_id::text,''), COALESCE(actor_id::text,''),
+		       action, COALESCE(target_type,''), COALESCE(target_id::text,''),
+		       metadata, occurred_at
+		FROM   audit_logs
+		ORDER  BY occurred_at DESC
+		LIMIT  $1 OFFSET $2
+	`
 )

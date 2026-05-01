@@ -70,3 +70,37 @@ func (r *PostgresAuditRepository) ListByTenant(ctx context.Context, tenantID str
 
 	return logs, nil
 }
+
+// ListAll retrieves audit logs across all tenants with pagination.
+// Intended for platform super-admins only.
+func (r *PostgresAuditRepository) ListAll(ctx context.Context, limit, offset int) ([]*domain.AuditLog, error) {
+	rows, err := r.db.Query(ctx, queryListAll, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all audit logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []*domain.AuditLog
+	for rows.Next() {
+		var l domain.AuditLog
+		if err := rows.Scan(
+			&l.ID,
+			&l.TenantID,
+			&l.ActorID,
+			&l.Action,
+			&l.TargetType,
+			&l.TargetID,
+			&l.Metadata,
+			&l.OccurredAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan audit log: %w", err)
+		}
+		logs = append(logs, &l)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("audit log iteration error: %w", err)
+	}
+
+	return logs, nil
+}

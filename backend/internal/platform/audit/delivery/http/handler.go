@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"strconv"
 
+	kernelauth "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/auth"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
-	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
+	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
 )
 
 // AuditHandler handles HTTP requests for the audit read model.
@@ -99,4 +100,45 @@ func parsePagination(r *http.Request) (limit, offset int) {
 		}
 	}
 	return
+}
+
+// ListAll handles GET /api/v1/audit-logs
+//
+// Query params:
+//
+//	limit  — number of results (default 50, max 200)
+//	offset — pagination offset  (default 0)
+//
+// Requires the calling user to have the platform-level ROLE_ADMIN.
+func (h *AuditHandler) ListAll(w http.ResponseWriter, r *http.Request) {
+	// ── Auth guard ────────────────────────────────────────────────────────────
+	// Only platform super-admins can view all audit logs across the entire system.
+	// This relies on the JWT role injected by the Auth middleware into the context.
+	if !kernelauth.IsPlatformAdmin(r.Context()) {
+		response.Error(w, errors.Forbidden("only platform administrators can view global audit logs"))
+		return
+	}
+
+	// ── Pagination ────────────────────────────────────────────────────────────
+	limit, offset := parsePagination(r)
+
+	// ── Fetch ─────────────────────────────────────────────────────────────────
+	logs, err := h.listUC.All(r.Context(), limit, offset)
+	if err != nil {
+		response.Error(w, errors.WrapInternal(err))
+		return
+	}
+
+	// ── Serialize ─────────────────────────────────────────────────────────────
+	data := make([]AuditLogResponse, len(logs))
+	for i, l := range logs {
+		data[i] = toAuditLogResponse(l)
+	}
+
+	response.JSON(w, http.StatusOK, AuditLogListResponse{
+		Data:   data,
+		Total:  len(data),
+		Limit:  limit,
+		Offset: offset,
+	})
 }
