@@ -20,7 +20,7 @@ This project is structured in three distinct layers, ensuring that business logi
 
 ---
 
-## ✨ Features
+## ✨ Features start
 
 ### 🛡 Production-Grade Error Handling
 A sophisticated error system (`internal/kernel/errors`) designed for observability and developer experience:
