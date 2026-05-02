@@ -1,0 +1,314 @@
+# *RFC #0017:* Stratégie de Pagination pour SaaS Multi-Tenant (OFFSET → Cursor-Based)
+
+**date:** `2026 May 02`
+
+---
+
+## **Status:** `PROPOSED`
+
+---
+
+## **Summary**
+
+Ce RFC propose l’adoption d’une stratégie de pagination évolutive pour un backend SaaS multi-tenant :
+
+* **v1** : Pagination SQL avec `LIMIT/OFFSET`
+* **v2** : Migration vers **cursor-based pagination** pour les tables à haute cardinalité
+
+L’objectif est de **démarrer rapidement** tout en garantissant une **scalabilité sans refonte API**.
+
+---
+
+## **Motivation**
+
+### Contexte actuel
+
+Le socle backend repose sur :
+
+* Clean Architecture (`kernel/`, `platform/`, `modules/`)
+* Base PostgreSQL partagée avec `tenant_id`
+* APIs REST paginées (users, properties, audit_logs…)
+
+Aujourd’hui, la pagination est implémentée via :
+
+```sql
+LIMIT X OFFSET Y
+```
+
+### Problème
+
+Cette approche devient inefficace lorsque :
+
+* cardinalité élevée (>10k lignes par tenant ou global)
+* accès profond (page 100+)
+* forte concurrence (multi-tenant)
+
+PostgreSQL doit effectuer un **scan linéaire jusqu’à l’offset**, entraînant :
+
+* latence croissante
+* consommation CPU inutile
+* dégradation globale des performances
+
+---
+
+## **Proposal**
+
+### 1. Stratégie hybride évolutive
+
+| Phase | Stratégie         | Cas d’usage            |
+| ----- | ----------------- | ---------------------- |
+| v1    | OFFSET pagination | datasets petits/moyens |
+| v2    | Cursor pagination | haute cardinalité      |
+
+---
+
+### 2. Concepts clés
+
+#### OFFSET pagination
+
+```sql
+SELECT * FROM table
+WHERE tenant_id = $1
+ORDER BY created_at DESC
+LIMIT 20 OFFSET 40;
+```
+
+#### Cursor pagination
+
+```sql
+SELECT * FROM table
+WHERE tenant_id = $1
+AND (created_at, id) < ($cursor_date, $cursor_id)
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+---
+
+### 3. Format de réponse (contrat API)
+
+```json
+{
+  "data": [...],
+  "page": 2,
+  "limit": 20,
+  "next_cursor": "base64(...)",
+  "has_more": true
+}
+```
+
+### Invariants
+
+* `data` toujours présent
+* `next_cursor` nullable
+* `has_more` fiable
+* ordre strict et stable
+
+---
+
+### 4. Encodage du cursor
+
+Structure interne :
+
+```json
+{
+  "created_at": "2026-05-01T10:00:00Z",
+  "id": "uuid"
+}
+```
+
+Encodé en Base64 pour transport.
+
+---
+
+### 5. Responsabilités des composants
+
+#### Repository
+
+* applique filtres (`tenant_id`)
+* construit requêtes SQL
+* gère logique cursor
+
+#### Usecase
+
+* valide paramètres (limit, cursor)
+* orchestre appel repository
+
+#### Delivery (HTTP)
+
+* parse query params
+* retourne format standardisé
+
+---
+
+### 6. Flux de données
+
+```text
+HTTP Request
+→ parse (cursor, limit)
+→ usecase
+→ repository (SQL avec cursor)
+→ DB
+→ résultats
+→ encodage next_cursor
+→ HTTP response JSON
+```
+
+---
+
+## **Justification des choix**
+
+### Pourquoi OFFSET en v1
+
+* simplicité d’implémentation
+* faible coût initial
+* suffisant pour MVP
+
+### Pourquoi Cursor en v2
+
+* performance constante O(1)
+* utilisation optimale des index
+* adapté aux datasets évolutifs
+
+### Pourquoi stratégie hybride
+
+* évite sur-engineering initial
+* permet transition progressive
+* maintient compatibilité API
+
+---
+
+## **Alternatives**
+
+### Alternative A : Cursor-only dès le départ
+
+**Avantages**
+
+* performance optimale immédiate
+* pas de migration future
+
+**Inconvénients**
+
+* complexité accrue
+* onboarding plus difficile
+* surdimensionné pour petits datasets
+
+**Verdict** : rejetée (coût initial trop élevé)
+
+---
+
+### Alternative B : OFFSET + index optimisés uniquement
+
+**Avantages**
+
+* simple
+* pas de changement API
+
+**Inconvénients**
+
+* ne résout pas le problème fondamental
+* dégradation inévitable à grande échelle
+
+**Verdict** : rejetée (non scalable)
+
+---
+
+### Alternative C : Pagination in-memory
+
+**Avantages**
+
+* simple
+* rapide pour petits datasets
+
+**Inconvénients**
+
+* non viable pour haute cardinalité
+* risque mémoire
+
+**Verdict** : limitée aux cas spécifiques (faible cardinalité)
+
+---
+
+## **Impacts**
+
+### Code existant
+
+* ajout support `cursor` dans DTO
+* modification repositories
+* backward compatible
+
+---
+
+### Performance
+
+* amélioration significative pour grandes tables
+* réduction charge DB
+
+---
+
+### Équipe
+
+* légère montée en complexité
+* nécessite formation cursor pagination
+
+---
+
+## **Risks & Mitigations**
+
+### Risque 1 : ordre instable
+
+**Mitigation**
+
+* tri strict `(created_at, id)`
+
+---
+
+### Risque 2 : duplication ou perte de données
+
+**Mitigation**
+
+* cursor basé sur colonnes uniques
+* tests intensifs
+
+---
+
+### Risque 3 : mauvaise adoption
+
+**Mitigation**
+
+* documentation claire
+* helpers partagés (`platform/pagination`)
+
+---
+
+## **Migration / Rollout**
+
+### Étape 1
+
+* introduire `next_cursor` dans réponses (optionnel)
+
+### Étape 2
+
+* implémenter support cursor côté backend
+
+### Étape 3
+
+* clients adoptent progressivement
+
+### Étape 4
+
+* déprécation OFFSET pour endpoints critiques
+
+---
+
+## **Conclusion**
+
+Cette stratégie permet :
+
+* démarrage rapide
+* évolution progressive
+* scalabilité long terme
+
+Elle s’aligne avec les exigences d’un **socle SaaS multi-tenant destiné à croître**.
+
+---
