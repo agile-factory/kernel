@@ -61,11 +61,32 @@ func Auth(jwtSecret string) func(http.Handler) http.Handler {
 	}
 }
 
+// jwtHeader holds the bits of the JWT header we care about (only the algorithm).
+type jwtHeader struct {
+	Alg string `json:"alg"`
+}
+
 // validateJWT parses and verifies an HS256 JWT, returning the payload.
 func validateJWT(token string, secretKey []byte) (*jwtPayload, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return nil, errors.Unauthorized("invalid token format")
+	}
+
+	// Pin the algorithm: refuse any token whose header advertises something
+	// other than HS256. This blocks the classic "alg=none" downgrade and
+	// asymmetric-key confusion attacks even though the HMAC compare below
+	// would also catch them in practice.
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, errors.Unauthorized("invalid token header encoding")
+	}
+	var header jwtHeader
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return nil, errors.Unauthorized("invalid token header format")
+	}
+	if header.Alg != "HS256" {
+		return nil, errors.Unauthorized("unsupported token algorithm")
 	}
 
 	// Verify signature

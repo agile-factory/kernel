@@ -3,6 +3,7 @@ package usecase_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,18 +13,45 @@ import (
 
 // ─── Mock AuditRepository ─────────────────────────────────────────────────────
 
+// mockAuditRepo is concurrency-safe because LogEventUseCase.Execute runs Save
+// in a goroutine (fire-and-forget), so tests assert state from a different
+// goroutine than the writer.
 type mockAuditRepo struct {
-	logs     []*domain.AuditLog
-	saveErr  error
-	listErr  error
+	mu      sync.Mutex
+	logs    []*domain.AuditLog
+	saveErr error
+	listErr error
 }
 
 func (m *mockAuditRepo) Save(ctx context.Context, log *domain.AuditLog) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.saveErr != nil {
 		return m.saveErr
 	}
 	m.logs = append(m.logs, log)
 	return nil
+}
+
+// logCount returns the current number of saved logs under the mutex.
+func (m *mockAuditRepo) logCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.logs)
+}
+
+// waitForLogs polls until the repo holds at least n logs or the timeout fires.
+// Used by tests to wait on the goroutine spawned by LogEventUseCase.Execute.
+func (m *mockAuditRepo) waitForLogs(t *testing.T, n int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if m.logCount() >= n {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("expected %d log(s) saved within %s, got %d", n, timeout, m.logCount())
 }
 
 func (m *mockAuditRepo) ListByTenant(ctx context.Context, tenantID string, limit, offset int) ([]*domain.AuditLog, error) {
@@ -151,9 +179,8 @@ func TestLogEvent_SavesSuccessfully(t *testing.T) {
 		Metadata:   map[string]any{"email": "alice@agile.io"},
 	})
 
-	if len(repo.logs) != 1 {
-		t.Errorf("expected 1 log saved, got %d", len(repo.logs))
-	}
+	// Save runs in a goroutine (fire-and-forget) — wait for it to land.
+	repo.waitForLogs(t, 1, time.Second)
 }
 
 func TestLogEvent_FireAndForget_NoError(t *testing.T) {
@@ -161,12 +188,32 @@ func TestLogEvent_FireAndForget_NoError(t *testing.T) {
 	repo := &mockAuditRepo{saveErr: fmt.Errorf("db: connection refused")}
 	uc := usecase.NewLogEventUseCase(repo)
 
-	// Ne doit pas paniquer
+	// Ne doit pas paniquer (l'erreur du Save est avalée et journalisée).
 	uc.Execute(context.Background(), usecase.LogEventParams{
 		TenantID: "tenant-001",
 		ActorID:  "user-001",
 		Action:   domain.ACTION_USER_LOGGED_IN,
 	})
+	// Laisse la goroutine se terminer pour éviter une fuite entre tests.
+	time.Sleep(20 * time.Millisecond)
+}
+
+func TestLogEvent_DetachesFromRequestContext(t *testing.T) {
+	// Simulate a cancelled request context: the audit save MUST still proceed
+	// because LogEventUseCase derives a context.WithoutCancel from it.
+	repo := &mockAuditRepo{}
+	uc := usecase.NewLogEventUseCase(repo)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-cancel before the call
+
+	uc.Execute(ctx, usecase.LogEventParams{
+		TenantID: "tenant-001",
+		ActorID:  "user-001",
+		Action:   domain.ACTION_USER_LOGGED_IN,
+	})
+
+	repo.waitForLogs(t, 1, time.Second)
 }
 
 // ─── ListAuditLogsUseCase — v1 Offset ─────────────────────────────────────────

@@ -70,6 +70,20 @@ func (s *JWTService) ValidateToken(token string) (string, error) {
 		return "", errors.New("invalid token format")
 	}
 
+	// Pin the algorithm: reject any token whose header advertises something
+	// other than HS256 (defends against alg=none and key-confusion attacks).
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", errors.New("invalid token header encoding")
+	}
+	var header jwtHeader
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return "", errors.New("invalid token header format")
+	}
+	if header.Alg != "HS256" {
+		return "", errors.New("unsupported token algorithm")
+	}
+
 	unsignedToken := parts[0] + "." + parts[1]
 	signature := parts[2]
 

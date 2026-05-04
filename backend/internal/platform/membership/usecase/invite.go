@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	stderrors "errors"
 
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
 	auditdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
@@ -53,8 +54,14 @@ func (uc *InviteMemberUseCase) Execute(ctx context.Context, inviterID, tenantID,
 		return nil, domain.ErrCannotInviteAsOwner
 	}
 
-	// Check the invitee doesn't already have a membership
-	existing, _ := uc.repo.FindByUserAndTenant(ctx, inviteeUserID, tenantID)
+	// Check the invitee doesn't already have a membership.
+	// Distinguish "not found" (expected, proceed) from infrastructure errors
+	// (must propagate — silently treating them as "no membership exists" would
+	// let us insert a duplicate row that only the UNIQUE constraint catches).
+	existing, err := uc.repo.FindByUserAndTenant(ctx, inviteeUserID, tenantID)
+	if err != nil && !stderrors.Is(err, domain.ErrMembershipNotFound) {
+		return nil, errors.WrapInternal(err)
+	}
 	if existing != nil {
 		return nil, domain.ErrMembershipAlreadyExists
 	}

@@ -1,11 +1,13 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 
 	kernelauth "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/auth"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
+	kernelerrors "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
+	auditdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
 	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
 )
@@ -37,25 +39,27 @@ func NewAuditHandlerV2(listUC *usecase.ListAuditLogsUseCase, membershipRepo memb
 // Requires the calling user to be an active ROLE_ADMIN or ROLE_OWNER of the tenant.
 func (h *AuditHandlerV2) ListByTenantV2(w http.ResponseWriter, r *http.Request) {
 	// ── Auth guard ────────────────────────────────────────────────────────────
-	callerID := r.Header.Get("X-User-ID")
+	// Read the caller from the context (populated by the Auth middleware after
+	// JWT verification). Reading X-User-ID directly would be unsafe.
+	callerID := kernelauth.UserIDFromContext(r.Context())
 	if callerID == "" {
-		response.Error(w, errors.Unauthorized("authentication required"))
+		response.Error(w, kernelerrors.Unauthorized("authentication required"))
 		return
 	}
 
 	tenantID := r.PathValue("tenantId")
 	if tenantID == "" {
-		response.Error(w, errors.BadRequest("tenantId is required"))
+		response.Error(w, kernelerrors.BadRequest("tenantId is required"))
 		return
 	}
 
 	callerMembership, err := h.membershipRepo.FindByUserAndTenant(r.Context(), callerID, tenantID)
 	if err != nil {
-		response.Error(w, errors.Forbidden("you do not have access to this tenant's audit logs"))
+		response.Error(w, kernelerrors.Forbidden("you do not have access to this tenant's audit logs"))
 		return
 	}
 	if !callerMembership.IsActive() || !callerMembership.IsAdmin() {
-		response.Error(w, errors.Forbidden("only active admins can view audit logs"))
+		response.Error(w, kernelerrors.Forbidden("only active admins can view audit logs"))
 		return
 	}
 
@@ -66,25 +70,11 @@ func (h *AuditHandlerV2) ListByTenantV2(w http.ResponseWriter, r *http.Request) 
 	// ── Fetch ─────────────────────────────────────────────────────────────────
 	page, err := h.listUC.ByTenantCursor(r.Context(), tenantID, limit, afterCursor)
 	if err != nil {
-		// Distinguish a malformed cursor (client error) from an internal error.
-		response.Error(w, errors.BadRequest("invalid cursor: "+err.Error()))
+		writeCursorError(w, err)
 		return
 	}
 
-	// ── Serialize ─────────────────────────────────────────────────────────────
-	data := make([]AuditLogResponse, len(page.Logs))
-	for i, l := range page.Logs {
-		data[i] = toAuditLogResponse(l)
-	}
-
-	response.JSON(w, http.StatusOK, AuditLogListResponseV2{
-		Data:       data,
-		Total:      -1,
-		Limit:      limit,
-		Offset:     0,
-		NextCursor: page.NextCursor,
-		HasMore:    page.HasMore,
-	})
+	writeCursorPage(w, page, limit)
 }
 
 // ListAllV2 handles GET /api/v2/audit-logs
@@ -96,29 +86,40 @@ func (h *AuditHandlerV2) ListByTenantV2(w http.ResponseWriter, r *http.Request) 
 //
 // Requires the calling user to have the platform-level ROLE_ADMIN.
 func (h *AuditHandlerV2) ListAllV2(w http.ResponseWriter, r *http.Request) {
-	// ── Auth guard ────────────────────────────────────────────────────────────
 	if !kernelauth.IsPlatformAdmin(r.Context()) {
-		response.Error(w, errors.Forbidden("only platform administrators can view global audit logs"))
+		response.Error(w, kernelerrors.Forbidden("only platform administrators can view global audit logs"))
 		return
 	}
 
-	// ── Cursor params ─────────────────────────────────────────────────────────
 	limit := parseLimitV2(r)
 	afterCursor := r.URL.Query().Get("after")
 
-	// ── Fetch ─────────────────────────────────────────────────────────────────
 	page, err := h.listUC.AllCursor(r.Context(), limit, afterCursor)
 	if err != nil {
-		response.Error(w, errors.BadRequest("invalid cursor: "+err.Error()))
+		writeCursorError(w, err)
 		return
 	}
 
-	// ── Serialize ─────────────────────────────────────────────────────────────
+	writeCursorPage(w, page, limit)
+}
+
+// writeCursorError maps a use-case error to the right HTTP status:
+//   - ErrInvalidCursor → 400 with a generic message (no internal-error leakage)
+//   - any other error  → 500 via WrapInternal (the kernel error layer logs it)
+func writeCursorError(w http.ResponseWriter, err error) {
+	if errors.Is(err, auditdomain.ErrInvalidCursor) {
+		response.Error(w, kernelerrors.BadRequest("invalid cursor"))
+		return
+	}
+	response.Error(w, kernelerrors.WrapInternal(err))
+}
+
+// writeCursorPage serialises a CursorPage into the v2 response envelope.
+func writeCursorPage(w http.ResponseWriter, page *usecase.CursorPage, limit int) {
 	data := make([]AuditLogResponse, len(page.Logs))
 	for i, l := range page.Logs {
 		data[i] = toAuditLogResponse(l)
 	}
-
 	response.JSON(w, http.StatusOK, AuditLogListResponseV2{
 		Data:       data,
 		Total:      -1,

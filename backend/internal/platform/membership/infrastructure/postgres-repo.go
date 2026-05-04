@@ -8,8 +8,12 @@ import (
 
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// pgUniqueViolation is the SQLSTATE code Postgres returns on UNIQUE conflict.
+const pgUniqueViolation = "23505"
 
 // PostgresMembershipRepository implements domain.MembershipRepository using pgxpool.
 type PostgresMembershipRepository struct {
@@ -43,6 +47,12 @@ func (r *PostgresMembershipRepository) Save(ctx context.Context, m *domain.Membe
 		m.CreatedAt,
 		m.UpdatedAt,
 	)
+	// Translate the UNIQUE(user_id, tenant_id) violation that wins the race
+	// between concurrent invites into the domain-level "already exists" error.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
+		return domain.ErrMembershipAlreadyExists
+	}
 	return err
 }
 

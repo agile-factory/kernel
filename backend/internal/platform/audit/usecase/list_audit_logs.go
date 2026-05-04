@@ -65,7 +65,7 @@ func (uc *ListAuditLogsUseCase) ByTenantCursor(
 		return nil, fmt.Errorf("list by tenant cursor: %w", err)
 	}
 
-	return buildCursorPage(rows, limit), nil
+	return buildCursorPage(rows, limit)
 }
 
 // AllCursor returns a cursor-based page of audit logs across all tenants.
@@ -89,7 +89,7 @@ func (uc *ListAuditLogsUseCase) AllCursor(
 		return nil, fmt.Errorf("list all cursor: %w", err)
 	}
 
-	return buildCursorPage(rows, limit), nil
+	return buildCursorPage(rows, limit)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -106,13 +106,15 @@ func clampLimit(n int) int {
 
 // parseCursor decodes the afterCursor string into a *domain.CursorToken.
 // Returns nil (no error) when afterCursor is empty — this signals "first page".
+// All decode failures are wrapped with domain.ErrInvalidCursor so callers can
+// distinguish a bad client input (HTTP 400) from a repo failure (HTTP 500).
 func parseCursor(afterCursor string) (*domain.CursorToken, error) {
 	if afterCursor == "" {
 		return nil, nil
 	}
 	tok, err := domain.DecodeCursor(afterCursor)
 	if err != nil {
-		return nil, fmt.Errorf("invalid cursor: %w", err)
+		return nil, fmt.Errorf("%w: %v", domain.ErrInvalidCursor, err)
 	}
 	return tok, nil
 }
@@ -120,7 +122,11 @@ func parseCursor(afterCursor string) (*domain.CursorToken, error) {
 // buildCursorPage applies the limit+1 sentinel logic:
 //   - If len(rows) > limit → more pages exist; trim the sentinel row
 //   - Encode the last retained row as next_cursor
-func buildCursorPage(rows []*domain.AuditLog, limit int) *CursorPage {
+//
+// Surfaces the (theoretically impossible) EncodeCursor error rather than
+// silencing it: returning has_more=true alongside an empty next_cursor
+// would leave the client unable to fetch the next page.
+func buildCursorPage(rows []*domain.AuditLog, limit int) (*CursorPage, error) {
 	hasMore := len(rows) > limit
 	if hasMore {
 		rows = rows[:limit] // drop the sentinel row
@@ -130,15 +136,16 @@ func buildCursorPage(rows []*domain.AuditLog, limit int) *CursorPage {
 	if hasMore && len(rows) > 0 {
 		last := rows[len(rows)-1]
 		tok := domain.CursorFromLog(last)
-		// EncodeCursor only fails on marshalling — practically impossible for
-		// a struct containing string + time.Time. We silence the error and
-		// return an empty cursor (client will treat as last page).
-		nextCursor, _ = domain.EncodeCursor(tok)
+		s, err := domain.EncodeCursor(tok)
+		if err != nil {
+			return nil, fmt.Errorf("encode next cursor: %w", err)
+		}
+		nextCursor = s
 	}
 
 	return &CursorPage{
 		Logs:       rows,
 		NextCursor: nextCursor,
 		HasMore:    hasMore,
-	}
+	}, nil
 }

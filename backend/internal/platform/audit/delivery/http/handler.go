@@ -36,7 +36,10 @@ func NewAuditHandler(listUC *usecase.ListAuditLogsUseCase, membershipRepo member
 // Requires the calling user (X-User-ID header) to be an active ROLE_ADMIN of the tenant.
 func (h *AuditHandler) ListByTenant(w http.ResponseWriter, r *http.Request) {
 	// ── Auth guard ────────────────────────────────────────────────────────────
-	callerID := r.Header.Get("X-User-ID")
+	// Read the caller from the request context (populated by the Auth middleware
+	// after JWT verification). Reading from the X-User-ID header would be unsafe
+	// because clients can send that header directly.
+	callerID := kernelauth.UserIDFromContext(r.Context())
 	if callerID == "" {
 		response.Error(w, errors.Unauthorized("authentication required"))
 		return
