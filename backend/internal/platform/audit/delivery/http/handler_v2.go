@@ -55,7 +55,13 @@ func (h *AuditHandlerV2) ListByTenantV2(w http.ResponseWriter, r *http.Request) 
 
 	callerMembership, err := h.membershipRepo.FindByUserAndTenant(r.Context(), callerID, tenantID)
 	if err != nil {
-		response.Error(w, kernelerrors.Forbidden("you do not have access to this tenant's audit logs"))
+		// 403 only for an actual missing membership; bubble up real infra
+		// failures so the kernel error layer logs them and returns 500.
+		if errors.Is(err, memberdomain.ErrMembershipNotFound) {
+			response.Error(w, kernelerrors.Forbidden("you do not have access to this tenant's audit logs"))
+			return
+		}
+		response.Error(w, kernelerrors.WrapInternal(err))
 		return
 	}
 	if !callerMembership.IsActive() || !callerMembership.IsAdmin() {

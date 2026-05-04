@@ -40,10 +40,16 @@ func (uc *InviteMemberUseCase) Execute(ctx context.Context, inviterID, tenantID,
 		return nil, tenantdomain.ErrTenantNotFound
 	}
 
-	// Verify inviter is an active admin (ROLE_ADMIN or ROLE_OWNER) of this tenant
+	// Verify inviter is an active admin (ROLE_ADMIN or ROLE_OWNER) of this tenant.
+	// "Not found" → 403 Forbidden (the caller has no membership in this tenant).
+	// Any other error is an infrastructure failure and must NOT be masked as 403,
+	// otherwise a transient DB outage would silently look like missing perms.
 	inviterMembership, err := uc.repo.FindByUserAndTenant(ctx, inviterID, tenantID)
 	if err != nil {
-		return nil, domain.ErrInsufficientMemberRole
+		if stderrors.Is(err, domain.ErrMembershipNotFound) {
+			return nil, domain.ErrInsufficientMemberRole
+		}
+		return nil, errors.WrapInternal(err)
 	}
 	if !inviterMembership.IsActive() || !inviterMembership.IsAdmin() {
 		return nil, domain.ErrInsufficientMemberRole
@@ -70,7 +76,13 @@ func (uc *InviteMemberUseCase) Execute(ctx context.Context, inviterID, tenantID,
 	id := uuid.New().String()
 	membership := domain.NewInvitedMembership(id, inviteeUserID, tenantID, inviterID, role)
 
+	// The repo translates the UNIQUE(user_id, tenant_id) violation into
+	// domain.ErrMembershipAlreadyExists; pass that through unwrapped so the
+	// caller still sees a 409 instead of a generic 500.
 	if err := uc.repo.Save(ctx, membership); err != nil {
+		if stderrors.Is(err, domain.ErrMembershipAlreadyExists) {
+			return nil, err
+		}
 		return nil, errors.WrapInternal(err)
 	}
 

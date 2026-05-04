@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	kernelauth "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/auth"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
 	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
@@ -35,9 +36,10 @@ func NewMembershipHandler(
 }
 
 // Invite handles POST /memberships/invite
-// The acting user ID is extracted from the X-User-ID header (set by auth middleware).
+// The acting user ID is read from the request context (populated by the Auth
+// middleware after JWT verification) — never from a client-controllable header.
 func (h *MembershipHandler) Invite(w http.ResponseWriter, r *http.Request) {
-	inviterID := r.Header.Get("X-User-ID")
+	inviterID := kernelauth.UserIDFromContext(r.Context())
 	if inviterID == "" {
 		response.Error(w, errors.Unauthorized("authentication required"))
 		return
@@ -64,7 +66,7 @@ func (h *MembershipHandler) Invite(w http.ResponseWriter, r *http.Request) {
 
 // Accept handles POST /memberships/{id}/accept
 func (h *MembershipHandler) Accept(w http.ResponseWriter, r *http.Request) {
-	callerID := r.Header.Get("X-User-ID")
+	callerID := kernelauth.UserIDFromContext(r.Context())
 	if callerID == "" {
 		response.Error(w, errors.Unauthorized("authentication required"))
 		return
@@ -87,7 +89,7 @@ func (h *MembershipHandler) Accept(w http.ResponseWriter, r *http.Request) {
 
 // Revoke handles POST /memberships/{id}/revoke
 func (h *MembershipHandler) Revoke(w http.ResponseWriter, r *http.Request) {
-	revokerID := r.Header.Get("X-User-ID")
+	revokerID := kernelauth.UserIDFromContext(r.Context())
 	if revokerID == "" {
 		response.Error(w, errors.Unauthorized("authentication required"))
 		return

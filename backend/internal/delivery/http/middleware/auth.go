@@ -21,15 +21,16 @@ type jwtPayload struct {
 	Sub  string `json:"sub"`  // user ID
 	Role string `json:"role"` // platform role
 	Exp  int64  `json:"exp"`  // expiration unix timestamp
+	Iat  int64  `json:"iat"`  // issued-at unix timestamp (kept in sync with jwt-service)
 }
 
 // Auth returns a middleware that validates the JWT Bearer token present in the
-// Authorization header and injects the authenticated user ID into the request context.
+// Authorization header and injects the authenticated user ID and platform role
+// into the request context.
 //
-// On success:
-//   - The user ID (sub claim) is stored via kernelauth.WithUserID.
-//   - The X-User-ID header is set on the request for downstream handlers that
-//     read it directly (legacy compatibility).
+// Downstream handlers MUST read identity from the context (kernelauth.UserIDFromContext,
+// kernelauth.PlatformRoleFromContext) — never from request headers — because headers
+// are client-controllable and could be spoofed by a misconfigured proxy.
 //
 // On failure: responds with 401 Unauthorized and does not call next.
 func Auth(jwtSecret string) func(http.Handler) http.Handler {
@@ -50,11 +51,9 @@ func Auth(jwtSecret string) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Inject into context and header for downstream compatibility.
 			ctx := kernelauth.WithUserID(r.Context(), payload.Sub)
 			ctx = kernelauth.WithPlatformRole(ctx, payload.Role)
 			r = r.WithContext(ctx)
-			r.Header.Set("X-User-ID", payload.Sub)
 
 			next.ServeHTTP(w, r)
 		})

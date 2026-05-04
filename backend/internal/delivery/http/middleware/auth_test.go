@@ -126,7 +126,10 @@ func TestAuth_ValidToken_InjectsPlatformRoleIntoContext(t *testing.T) {
 	}
 }
 
-func TestAuth_ValidToken_SetsXUserIDHeader(t *testing.T) {
+// TestAuth_DoesNotSetXUserIDHeader documents the contract that the middleware
+// MUST NOT inject identity into request headers — handlers are required to read
+// from the context. Prevents regressions to the old "legacy header" pattern.
+func TestAuth_DoesNotSetXUserIDHeader(t *testing.T) {
 	next := &captureHandler{}
 	handler := middleware.Auth(testSecret)(next)
 
@@ -136,8 +139,8 @@ func TestAuth_ValidToken_SetsXUserIDHeader(t *testing.T) {
 
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
-	if next.xUserID != "user-123" {
-		t.Errorf("X-User-ID header: got %q, want %q", next.xUserID, "user-123")
+	if next.xUserID != "" {
+		t.Errorf("X-User-ID header should not be set by middleware; got %q", next.xUserID)
 	}
 }
 

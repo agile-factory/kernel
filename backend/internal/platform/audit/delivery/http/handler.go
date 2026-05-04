@@ -1,6 +1,7 @@
 package http
 
 import (
+	stderrors "errors"
 	"net/http"
 	"strconv"
 
@@ -54,7 +55,11 @@ func (h *AuditHandler) ListByTenant(w http.ResponseWriter, r *http.Request) {
 	// Only active admins (ROLE_ADMIN or ROLE_OWNER) of this tenant may read its audit trail.
 	callerMembership, err := h.membershipRepo.FindByUserAndTenant(r.Context(), callerID, tenantID)
 	if err != nil {
-		response.Error(w, errors.Forbidden("you do not have access to this tenant's audit logs"))
+		if stderrors.Is(err, memberdomain.ErrMembershipNotFound) {
+			response.Error(w, errors.Forbidden("you do not have access to this tenant's audit logs"))
+			return
+		}
+		response.Error(w, errors.WrapInternal(err))
 		return
 	}
 	if !callerMembership.IsActive() || !callerMembership.IsAdmin() {
