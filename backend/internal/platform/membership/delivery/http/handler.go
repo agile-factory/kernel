@@ -195,7 +195,7 @@ func parseMembershipPage(r *http.Request) (limit, offset int) {
 // applyPage slices a membership list for in-memory pagination.
 func applyPage(all []*domain.Membership, limit, offset int) []*domain.Membership {
 	if offset >= len(all) {
-		return nil
+		return []*domain.Membership{}
 	}
 	end := offset + limit
 	if end > len(all) {
