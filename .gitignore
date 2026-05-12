@@ -57,3 +57,4 @@ coverage/
 # CI
 .github/workflows/*.log
 docs/architecture/.$architecture.drawio.bkp
+docs/architecture/.$lokatik.drawio.bkp
