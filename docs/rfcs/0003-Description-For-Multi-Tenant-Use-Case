@@ -4,7 +4,7 @@
 
 ---
 
-## **Status:** `PROPOSED`
+## **Status:** `IMPLEMENTED`
 
 ---
 
@@ -125,15 +125,18 @@ created_at
 
 ### memberships
 
-Relation user ↔ tenant.
+Relation user ↔ tenant. Table implémentée en v1.
 
 ```text
 id
 user_id
 tenant_id
-role
-status
-joined_at
+role        ← ROLE_ADMIN | ROLE_AGENT | ROLE_VIEWER
+status      ← PENDING | ACTIVE | REVOKED
+invited_by  ← UUID de l'inviteur (NULL si auto-inscription)
+joined_at   ← NULL jusqu'à Accept()
+created_at
+updated_at
 ```
 
 Un utilisateur peut appartenir à plusieurs tenants.
@@ -141,8 +144,18 @@ Un utilisateur peut appartenir à plusieurs tenants.
 Exemple :
 
 ```text
-user@x.com = admin tenant A
-user@x.com = viewer tenant B
+user@x.com = ROLE_ADMIN tenant A
+user@x.com = ROLE_VIEWER tenant B
+```
+
+**Cycle de vie** :
+
+```
+NewInvitedMembership() → PENDING
+  .Accept()           → ACTIVE (joined_at = NOW)
+  .Revoke()           → REVOKED
+
+NewSelfMembership()   → ACTIVE direct (auto-inscription)
 ```
 
 ### tenant_settings
@@ -211,21 +224,33 @@ agence1.app.com
 
 ## 5. Propagation backend
 
-Le tenant courant est injecté dans :
+Le tenant courant est injecté dans `context.Context` via le middleware `TenantContext`
+(implémenté dans `internal/delivery/http/middleware/tenant.go`).
 
-```go
-context.Context
-```
-
-Middleware :
+**Ordre de résolution** (implémenté) :
 
 ```text
-Resolve tenant
-Verify membership
-Attach tenant_id to context
+1. URL path param   : r.PathValue("tenantId")
+2. Header           : X-Tenant-ID
+3. Query param      : ?tenantId=<uuid>
 ```
 
-Tous les repositories lisent ensuite ce contexte.
+Étapes 4 (custom domain / subdomain) différées à v1.1.
+
+**Middleware Auth** (`middleware/auth.go`) :
+- Valide le JWT Bearer depuis `Authorization: Bearer <token>`
+- Injecte le `user_id` via `kernelauth.WithUserID(ctx, userID)`
+- Positionne aussi le header `X-User-ID` pour la compatibilité descendante
+
+**Clés de contexte** centralisées dans `kernel/auth/context.go` :
+
+```go
+// Lecture dans n'importe quelle couche
+userID   := kernelauth.UserIDFromContext(ctx)
+tenantID := kernelauth.TenantIDFromContext(ctx)
+```
+
+Tous les repositories filtrent sur `tenant_id` extrait du contexte.
 
 ---
 
@@ -245,15 +270,26 @@ Des tests automatiques devront vérifier qu’un tenant A ne voit jamais tenant 
 
 ## 7. Permissions
 
-Rôles standards :
+Rôles implémentés en v1 (dans `platform/membership/domain/membership.go`) :
 
 ```text
-owner
-admin
-manager
-editor
-viewer
+ROLE_OWNER   ← fondateur du tenant (créateur initial)
+ROLE_ADMIN   ← administrateur délégué (peut inviter, révoquer)
+ROLE_AGENT   ← contributeur (actions métier, pas d'admin)
+ROLE_VIEWER  ← lecture seule
 ```
+
+**Sémantique de ROLE_OWNER** :
+- Assigné automatiquement au créateur du tenant via `NewSelfMembership(..., MEMBER_ROLE_OWNER)`
+- **Ne peut pas être révoqué** par un admin — `ErrCannotRevokeOwner`
+- **Ne peut pas être assigné via invitation** — `ErrCannotInviteAsOwner`
+- Hérite de tous les privilèges admin (`IsAdmin()` retourne `true` pour OWNER et ADMIN)
+- Transfert de propriété prévu en v1.1 via un endpoint dédié
+
+**Rationale du choix** par rapport aux rôles initialement proposés (`owner`, `admin`, `manager`, `editor`, `viewer`) :
+
+- `manager` et `editor` → trop fins pour un socle générique ; ils seront définis par chaque SaaS via `platform/permission` (RFC-0010)
+- `ROLE_AGENT` → terme neutre pour un "contributeur" (ni admin, ni read-only) applicable à tous les domaines métier
 
 Les permissions sont évaluées **dans le contexte du tenant**, pas globalement.
 

@@ -8,10 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PostgresUserRepository is a mock implementation of domain.UserRepository
-// Wait until the database driver (pgx/sqlx) is configured to implement the real one.
+// PostgresUserRepository implements domain.UserRepository using pgxpool.
 type PostgresUserRepository struct {
-	mu    sync.RWMutex
+	mu sync.RWMutex
 	db *pgxpool.Pool
 }
 
@@ -22,36 +21,58 @@ func NewPostgresUserRepository(db *pgxpool.Pool) *PostgresUserRepository {
 	}
 }
 
-// Save stores the user in the mock storage.
+// Save persists a new user to the database.
 func (r *PostgresUserRepository) Save(ctx context.Context, user *domain.User) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, err := r.db.Exec(ctx, queryInsertUser, user.ID, user.TenantID, user.Email, user.HashedPassword, user.Role, user.CreatedAt, user.UpdatedAt); err != nil {
+	if _, err := r.db.Exec(ctx, queryInsertUser,
+		user.ID,
+		user.Email,
+		user.HashedPassword,
+		user.Role,
+		user.CreatedAt,
+		user.UpdatedAt,
+	); err != nil {
 		return err
 	}
 	return nil
 }
 
-// FindByEmail retrieves the user by email from the mock storage.
+// FindByEmail retrieves the user by email.
 func (r *PostgresUserRepository) FindByEmail(ctx context.Context, email domain.Email) (*domain.User, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	var user domain.User
-	if err := r.db.QueryRow(ctx, queryGetUserByEmail, email.String()).Scan(&user.ID, &user.Email, &user.HashedPassword, &user.Role, &user.CreatedAt, &user.UpdatedAt); err != nil {
+	if err := r.db.QueryRow(ctx, queryGetUserByEmail, email.String()).Scan(
+		&user.ID,
+		&user.Email,
+		&user.HashedPassword,
+		&user.Role,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	); err != nil {
 		return nil, err
 	}
 	return &user, nil
 }
 
-// FindByID retrieves the user by ID from the mock storage.
+// FindByID retrieves the user by ID.
 func (r *PostgresUserRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	var user domain.User
-	if err := r.db.QueryRow(ctx, queryGetUserByID, id).Scan(&user.ID, &user.Email, &user.HashedPassword, &user.Role, &user.CreatedAt, &user.UpdatedAt); err != nil {
+	if err := r.db.QueryRow(ctx, queryGetUserByID, id).Scan(
+		&user.ID,
+		&user.Email,
+		&user.HashedPassword,
+		&user.Role,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	); err != nil {
 		return nil, err
 	}
 	return &user, nil
 }
+

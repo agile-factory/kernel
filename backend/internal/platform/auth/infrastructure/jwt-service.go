@@ -18,13 +18,12 @@ type jwtHeader struct {
 	Typ string `json:"typ"`
 }
 
-// jwtPayload represents our specific JWT claims
+// jwtPayload represents our specific JWT claims.
 type jwtPayload struct {
-	Sub      string `json:"sub"`      // User ID
-	TenantID string `json:"tenantId"` // Tenant ID
-	Role     string `json:"role"`     // User Role
-	Exp      int64  `json:"exp"`      // Expiration time
-	Iat      int64  `json:"iat"`      // Issued at
+	Sub  string `json:"sub"`  // User ID
+	Role string `json:"role"` // User's platform role
+	Exp  int64  `json:"exp"`  // Expiration time
+	Iat  int64  `json:"iat"`  // Issued at
 }
 
 // JWTService implements TokenGenerator and TokenValidator using stdlib.
@@ -49,11 +48,10 @@ func (s *JWTService) GenerateToken(user *domain.User) (string, error) {
 
 	now := time.Now()
 	payload := jwtPayload{
-		Sub:      user.ID,
-		TenantID: user.TenantID,
-		Role:     string(user.Role),
-		Exp:      now.Add(s.tokenLifespan).Unix(),
-		Iat:      now.Unix(),
+		Sub:  user.ID,
+		Role: string(user.Role),
+		Exp:  now.Add(s.tokenLifespan).Unix(),
+		Iat:  now.Unix(),
 	}
 	payloadBytes, _ := json.Marshal(payload)
 	encodedPayload := base64.RawURLEncoding.EncodeToString(payloadBytes)
@@ -64,11 +62,26 @@ func (s *JWTService) GenerateToken(user *domain.User) (string, error) {
 	return unsignedToken + "." + signature, nil
 }
 
+
 // ValidateToken validates the JWT and returns the User ID (Sub).
 func (s *JWTService) ValidateToken(token string) (string, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return "", errors.New("invalid token format")
+	}
+
+	// Pin the algorithm: reject any token whose header advertises something
+	// other than HS256 (defends against alg=none and key-confusion attacks).
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", errors.New("invalid token header encoding")
+	}
+	var header jwtHeader
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return "", errors.New("invalid token header format")
+	}
+	if header.Alg != "HS256" {
+		return "", errors.New("unsupported token algorithm")
 	}
 
 	unsignedToken := parts[0] + "." + parts[1]
