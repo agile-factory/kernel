@@ -2,9 +2,11 @@
 
 **date:** `2026 May 01`
 
+> ⚠️ **Partiellement supersédé par [RFC-0018 — Amendements B2B Onboarding](0018-Amendements-B2B-Onboarding.md)** (2026-05-12) : les sections `RegisterUseCase` (signup public), l'endpoint `POST /api/v1/auth/register`, et les Open Questions #1 (password policy) et #4 (RS256/JWKS) sont résolues dans RFC-0018 et RFC-0028. Ce RFC reste valide pour l'historique et les sections non impactées (Login, JWT HS256).
+
 ---
 
-## **Status:** `ACCEPTED`
+## **Status:** `ACCEPTED` — sections onboarding **SUPERSEDED BY RFC-0018**
 
 ---
 

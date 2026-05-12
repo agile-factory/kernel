@@ -2,9 +2,15 @@
 
 **date:** `2026 May 01`
 
+> ❌ **Supersédé par :**
+> - **[RFC-0019 — Platform Notification B2B Email-First](0019-Platform-Notification-B2B-Email-First.md)** (2026-05-12) : redefinit les canaux pour les **memberships** (email-first, outbox at-least-once, SMS/WhatsApp optionnels pour OTP uniquement).
+> - **RFC-0036 — Platform customer_notifications** (à créer, P1bis) : canal multi-canal d'office pour les **end-customers B2B2C** (Email + SMS + WhatsApp + Push).
+>
+> Ce RFC reste valide pour l'historique et les patterns d'architecture (Dispatcher interface, templates Go, notification_logs). Les sections de priorisation de canaux et la stratégie de delivery sont remplacées.
+
 ---
 
-## **Status:** `DRAFT`
+## **Status:** `DRAFT` — **SUPERSEDED BY RFC-0019 + RFC-0036**
 
 ---
 

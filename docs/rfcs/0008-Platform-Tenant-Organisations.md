@@ -2,9 +2,11 @@
 
 **date:** `2026 May 01`
 
+> ⚠️ **Partiellement supersédé par [RFC-0018 — Amendements B2B Onboarding](0018-Amendements-B2B-Onboarding.md)** (2026-05-12) : `POST /api/v1/tenants` (création publique) est supprimé et remplacé par le flux `signup-owner` atomique (RFC-0018) et `POST /admin/v1/tenants` (super-admin). L'Open Question #2 ("qui peut créer un tenant ?") est tranchée dans RFC-0018. Ce RFC reste valide pour l'historique et le modèle de domaine Tenant.
+
 ---
 
-## **Status:** `ACCEPTED`
+## **Status:** `ACCEPTED` — création publique **SUPERSEDED BY RFC-0018**
 
 ---
 

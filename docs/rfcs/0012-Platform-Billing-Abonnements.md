@@ -2,9 +2,11 @@
 
 **date:** `2026 May 01`
 
+> ❌ **Supersédé par [RFC-0020 — Platform Billing Hybride + Merchant Mode](0020-Platform-Billing-Hybride-Merchant-Mode.md)** (2026-05-12) : RFC-0020 formalise la stratégie hybride Stripe + Mobile Money (Platform Mode + Merchant Mode B2B2C), aligne le Merchant Mode avec `platform/end_customers` (RFC-0033), et définit `tenant_settings.payment_region` pour la sélection du processeur. Ce RFC reste valide pour l'historique et la structure générale du domaine billing (Plan, Subscription, adapters).
+
 ---
 
-## **Status:** `DRAFT`
+## **Status:** `DRAFT` — **SUPERSEDED BY RFC-0020**
 
 ---
 
