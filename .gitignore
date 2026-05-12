@@ -56,3 +56,4 @@ coverage/
 
 # CI
 .github/workflows/*.log
+docs/architecture/.$architecture.drawio.bkp
