@@ -112,6 +112,13 @@
     "title": "Map"
   },
   {
+    "xml": "&lt;mxGraphModel&gt;&lt;root&gt;&lt;mxCell id=\"0\"/&gt;&lt;mxCell id=\"1\" parent=\"0\"/&gt;&lt;mxCell id=\"2\" connectable=\"0\" parent=\"1\" style=\"group;movable=1;resizable=1;rotatable=1;deletable=1;editable=1;locked=0;connectable=1;aspect=fixed;\" value=\"\" vertex=\"1\"&gt;&lt;mxGeometry height=\"100\" width=\"100\" as=\"geometry\"/&gt;&lt;/mxCell&gt;&lt;mxCell id=\"3\" parent=\"2\" style=\"verticalLabelPosition=bottom;shadow=0;dashed=0;align=center;html=1;verticalAlign=top;strokeWidth=1;shape=mxgraph.mockup.misc.map;fillColorStyles=fillColor2,fillColor3,fillColor4,fillColor5,fillColor6;strokeColorStyles=strokeColor2,strokeColor3;fillColor2=light-dark(#FFFFFF,#121212);fillColor3=light-dark(#808080,#808080);fillColor4=light-dark(#808080,#808080);fillColor5=light-dark(#808080,#808080);fillColor6=light-dark(#808080,#808080);strokeColor2=light-dark(#808080,#808080);strokeColor3=light-dark(#808080,#808080);fillColor=none;strokeColor=none;movable=1;resizable=1;rotatable=1;deletable=1;editable=1;locked=0;connectable=1;\" value=\"\" vertex=\"1\"&gt;&lt;mxGeometry height=\"100\" width=\"100\" as=\"geometry\"/&gt;&lt;/mxCell&gt;&lt;mxCell id=\"4\" parent=\"2\" style=\"html=1;dashed=0;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;shape=mxgraph.gmdl.gps;strokeColor=#660000;fillColor=#660000;shadow=0;strokeWidth=1;sketch=0;movable=1;resizable=1;rotatable=1;deletable=1;editable=1;locked=0;connectable=1;\" value=\"\" vertex=\"1\"&gt;&lt;mxGeometry height=\"10\" width=\"10\" x=\"34\" y=\"50\" as=\"geometry\"/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;",
+    "w": 100,
+    "h": 100,
+    "aspect": "fixed",
+    "title": "Map"
+  },
+  {
     "xml": "&lt;mxGraphModel&gt;&lt;root&gt;&lt;mxCell id=\"0\"/&gt;&lt;mxCell id=\"1\" parent=\"0\"/&gt;&lt;mxCell id=\"2\" parent=\"1\" style=\"verticalLabelPosition=bottom;shadow=0;dashed=0;align=center;html=1;verticalAlign=top;strokeWidth=1;shape=mxgraph.mockup.navigation.coverFlow;strokeColor=default;fillColor=default;aspect=fixed;\" value=\"\" vertex=\"1\"&gt;&lt;mxGeometry height=\"50\" width=\"100\" x=\"2.2737367544323206e-13\" y=\"-4.547473508864641e-13\" as=\"geometry\"/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;",
     "w": 100,
     "h": 50,
