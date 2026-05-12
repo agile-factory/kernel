@@ -1,0 +1,415 @@
+# *RFC #0003:* Multi-Tenancy Architecture du Socle SaaS
+
+**date:** `2026 Apr 29`
+
+---
+
+## **Status:** `PROPOSED`
+
+---
+
+## **Summary**
+
+Ce RFC définit l’architecture **multi-tenant native** du socle SaaS décrit dans RFC-0002.
+
+Le système adopte en v1 une stratégie :
+
+```text
+Shared Database
+Shared Schema
+tenant_id partout
+```
+
+Le multi-tenant sera une capacité **centrale du boilerplate**, réutilisable par tous les futurs SaaS du studio.
+
+Chaque produit lancé sur ce socle héritera immédiatement de :
+
+* isolation logique des organisations clientes
+* utilisateurs multi-organisations
+* rôles par tenant
+* branding par tenant
+* quotas / plans par tenant
+* auditabilité
+* évolutivité vers dedicated DB plus tard
+
+---
+
+## **Motivation**
+
+Le studio vise plusieurs SaaS B2B/B2B2C :
+
+```text
+immobilier
+CRM
+RH
+éducation
+restaurant
+logistique
+marketplace
+```
+
+Dans la majorité de ces cas, une même application doit servir :
+
+```text
+plusieurs entreprises
+plusieurs équipes
+plusieurs utilisateurs par entreprise
+données séparées
+abonnements séparés
+branding séparé
+```
+
+Sans multi-tenant natif dès le départ :
+
+* refonte coûteuse future
+* duplication de code par produit
+* onboarding client plus lent
+* billing plus difficile
+* architecture incohérente entre SaaS
+
+Le multi-tenant doit donc être traité comme **une brique plateforme**, pas comme une feature métier.
+
+---
+
+## **Proposal**
+
+## 1. Modèle retenu (v1)
+
+Architecture :
+
+```text
+1 base PostgreSQL
+1 schéma principal
+tenant_id sur toutes tables métier
+```
+
+Exemple :
+
+```sql
+properties (
+  id UUID,
+  tenant_id UUID,
+  title TEXT,
+  created_at TIMESTAMP
+)
+```
+
+---
+
+## 2. Entités centrales
+
+### tenants
+
+Organisation cliente.
+
+```text
+id
+name
+slug
+status
+plan_id
+created_at
+```
+
+### users
+
+Utilisateur global.
+
+```text
+id
+email
+password_hash
+status
+created_at
+```
+
+### memberships
+
+Relation user ↔ tenant.
+
+```text
+id
+user_id
+tenant_id
+role
+status
+joined_at
+```
+
+Un utilisateur peut appartenir à plusieurs tenants.
+
+Exemple :
+
+```text
+user@x.com = admin tenant A
+user@x.com = viewer tenant B
+```
+
+### tenant_settings
+
+Branding / préférences.
+
+```text
+logo_url
+primary_color
+language
+timezone
+currency
+custom_domain
+```
+
+### subscriptions
+
+Plan actif du tenant.
+
+### usage_quotas
+
+Compteurs et limites.
+
+---
+
+## 3. Pourquoi memberships au lieu de tenant_id sur users
+
+Le champ direct :
+
+```text
+users.tenant_id
+```
+
+est trop limité.
+
+Il empêche :
+
+* consultants multi-clients
+* agences gérant plusieurs comptes
+* utilisateurs internes studio
+* switch workspace type Slack / Notion
+
+Le modèle memberships est donc retenu.
+
+---
+
+## 4. Résolution du tenant
+
+Ordre de priorité :
+
+```text
+1. custom domain
+2. subdomain
+3. tenant actif depuis JWT/session
+4. tenant selector après login
+```
+
+Exemples :
+
+```text
+crm.client.sn
+agence1.app.com
+```
+
+---
+
+## 5. Propagation backend
+
+Le tenant courant est injecté dans :
+
+```go
+context.Context
+```
+
+Middleware :
+
+```text
+Resolve tenant
+Verify membership
+Attach tenant_id to context
+```
+
+Tous les repositories lisent ensuite ce contexte.
+
+---
+
+## 6. Isolation des données
+
+Toute requête métier doit filtrer :
+
+```sql
+WHERE tenant_id = $1
+```
+
+Jamais d’accès sans contexte tenant.
+
+Des tests automatiques devront vérifier qu’un tenant A ne voit jamais tenant B.
+
+---
+
+## 7. Permissions
+
+Rôles standards :
+
+```text
+owner
+admin
+manager
+editor
+viewer
+```
+
+Les permissions sont évaluées **dans le contexte du tenant**, pas globalement.
+
+---
+
+## 8. Billing
+
+Les abonnements sont liés au tenant :
+
+```text
+Free
+Starter
+Pro
+Enterprise
+```
+
+Les quotas peuvent limiter :
+
+```text
+nombre users
+stockage
+records
+API calls
+modules premium
+```
+
+---
+
+## 9. Branding par tenant
+
+Chaque tenant peut personnaliser :
+
+```text
+logo
+nom affiché
+couleurs
+emails
+custom domain
+langue
+timezone
+devise
+```
+
+Permet usage white-label.
+
+---
+
+## 10. Super Admin Studio
+
+Un rôle interne plateforme peut :
+
+```text
+voir tous tenants
+support impersonation contrôlée
+suspendre tenant
+forcer upgrade/downgrade
+voir métriques globales
+```
+
+---
+
+## 11. Évolution future
+
+Quand nécessaire :
+
+```text
+VIP tenants -> dedicated DB
+```
+
+Le modèle v1 doit rester compatible avec migration hybride.
+
+---
+
+## **Drawbacks**
+
+### Discipline obligatoire
+
+Tout accès data doit respecter tenant context.
+
+Un oubli de filtre = fuite inter-tenant.
+
+### Complexité plus élevée qu’un mono-tenant
+
+Memberships, quotas, branding, switching tenant augmentent la complexité initiale.
+
+### Reporting global plus complexe
+
+Les analytics cross-tenant demandent agrégations supplémentaires.
+
+### Migration dédiée DB future non triviale
+
+Possible, mais nécessite tooling.
+
+---
+
+## **Alternatives**
+
+### Alternative A : Mono-tenant par SaaS
+
+Un client = une instance.
+
+✅ Simple au début
+❌ coûteux à scaler, maintenance lourde
+
+**Verdict : rejetée**
+
+---
+
+### Alternative B : Database par tenant dès J1
+
+✅ isolation forte
+❌ DevOps lourd, coûteux, prématuré
+
+**Verdict : rejetée pour v1**
+
+---
+
+### Alternative C : Schema par tenant
+
+```text
+tenant_a.*
+tenant_b.*
+```
+
+✅ meilleure isolation logique
+❌ migrations plus complexes
+
+**Verdict : différée**
+
+---
+
+### Alternative D : Shared DB + Shared Schema + tenant_id
+
+✅ simple
+✅ scalable early stage
+✅ peu coûteux
+✅ standard SaaS moderne
+
+**Verdict : retenue**
+
+---
+
+## **Open Questions**
+
+1. Activer PostgreSQL Row-Level Security en v1 ou v1.1 ?
+2. Quotas temps réel en SQL ou cache Redis ?
+3. Support impersonation admin dès v1 ou plus tard ?
+4. Limiter nombre de tenants par user sur plans basiques ?
+5. Dedicated DB automation via script ou control-plane futur ?
+
+---
+
+## **References**
+
+* RFC-0002 Architecture & Stack Technique du Socle SaaS
+* Slack Technologies workspace model
+* Notion Labs, Inc. multi-workspace model
+* Shopify Inc. tenantized commerce patterns
+* PostgreSQL Row Level Security documentation

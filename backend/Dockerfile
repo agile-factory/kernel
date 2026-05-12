@@ -1,32 +1,27 @@
-# --- Builder Stage ---
-FROM rust:1.82-slim AS builder
-
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
-# Cache dependencies
-COPY Cargo.toml Cargo.lock* ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-ENV SQLX_OFFLINE=true
-RUN cargo build --release 2>/dev/null || true
-RUN rm -rf src
+# Install dependencies
+COPY go.mod go.sum* ./
+RUN go mod download
 
-# Build actual application
+# Copy source code
 COPY . .
-RUN touch src/main.rs
-RUN cargo build --release
 
-# --- Runner Stage ---
-FROM debian:bookworm-slim
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/bin/api cmd/api/main.go
 
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+# Final stage
+FROM alpine:latest
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/lokatik-backend /app/lokatik-backend
-COPY --from=builder /app/migrations /app/migrations
+# Copy the binary from the builder stage
+COPY --from=builder /app/bin/api /app/api
 
-EXPOSE 3000
+# Expose port
+EXPOSE 8080
 
-CMD ["/app/lokatik-backend"]
+# Command to run
+CMD ["/app/api"]
