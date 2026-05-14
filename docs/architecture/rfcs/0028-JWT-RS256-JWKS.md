@@ -6,7 +6,7 @@
 
 ---
 
-## **Status:** `DRAFT`
+## **Status:** `ACCEPTED` *(amendement ADR-0007 ; implémentation prévue P1-7 avec `platform/sso`, cf. plan §6)*
 
 ---
 

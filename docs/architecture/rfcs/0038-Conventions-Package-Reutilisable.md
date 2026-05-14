@@ -4,7 +4,7 @@
 
 ---
 
-## **Status:** `DRAFT`
+## **Status:** `ACCEPTED + IMPLEMENTED (P0-0a/b/c)`
 
 ---
 
@@ -56,9 +56,9 @@ platform/<feature>/
 │   ├── handler.go
 │   ├── dto.go
 │   └── routes.go            # RegisterRoutes(mux)
-└── migrations/              # .sql versionnés
-    ├── <feature>_001_create_table.up.sql
-    ├── <feature>_001_create_table.down.sql
+└── migrations/              # .sql versionnés (format <NNN>_<desc>.{up,down}.sql)
+    ├── 0001_create_table.up.sql
+    ├── 0001_create_table.down.sql
     └── ...
 ```
 
@@ -195,19 +195,17 @@ func (c *Config) validate() error {
 
 ### 4. Migrations embarquées
 
-Chaque package porte ses propres migrations dans `migrations/*.sql`, **préfixées par le nom du package** pour éviter les collisions :
+Chaque package porte ses propres migrations dans `migrations/`, suivant le format requis par `golang-migrate` : `<NNN>_<description>.{up,down}.sql` (préfixe numérique strict, exigence du parser `iofs`). L'isolation par-package rend le préfixe `<feature>_` superflu — chaque `embed.FS` a sa propre racine et son propre numéro de version.
 
 ```
 platform/auth/migrations/
-├── auth_001_create_users.up.sql
-├── auth_001_create_users.down.sql
-├── auth_002_add_email_verification.up.sql
-├── auth_002_add_email_verification.down.sql
-├── auth_003_create_refresh_tokens.up.sql
-└── auth_003_create_refresh_tokens.down.sql
+├── 0001_create_users.up.sql
+├── 0001_create_users.down.sql
+├── 0002_drop_users_tenant_id.up.sql
+└── 0002_drop_users_tenant_id.down.sql
 ```
 
-Exposées via `embed.FS` :
+Exposées via `embed.FS` au niveau du package :
 
 ```go
 //go:embed migrations/*.sql
@@ -217,17 +215,18 @@ var Migrations embed.FS
 Le consommateur compose toutes les migrations via `kernel/migrator` :
 
 ```go
-migrator.Run(db, []embed.FS{
-    auth.Migrations,
-    tenant.Migrations,
-    membership.Migrations,
-    audit.Migrations,
-    notification.Migrations,
-    localMigrations, // les migrations métier du SaaS consommateur
+migrator.Run(cfg.DatabaseURL, []migrator.Source{
+    {Name: "tenant",     FS: tenant.Migrations,     Path: "migrations"},
+    {Name: "auth",       FS: auth.Migrations,       Path: "migrations"},
+    {Name: "membership", FS: membership.Migrations, Path: "migrations"},
+    {Name: "audit",      FS: audit.Migrations,      Path: "migrations"},
+    // ... éventuellement les migrations métier du SaaS consommateur
 })
 ```
 
-`migrator.Run` agrège les FS, ordonne par préfixe + numéro de version, applique de manière transactionnelle. Les fichiers sont reconnus comme migration valides s'ils suivent le format `<feature>_<NNN>_<description>.{up,down}.sql`.
+`migrator.Run` itère sur les sources **dans l'ordre fourni** (le consommateur l'utilise pour respecter les dépendances : `tenant` → `auth` → `membership` → `audit`). Chaque source obtient sa propre table de versions `schema_migrations_<name>` via le query param `x-migrations-table` du driver postgres, ce qui permet à chaque package d'évoluer indépendamment sans collision de numéros.
+
+`migrator.Down(...)` parcourt les sources en ordre inverse pour un rollback propre.
 
 ### 5. Règles interdites
 
@@ -314,7 +313,7 @@ Le pipeline CI du repo `AgileFactory/kernel` vérifie :
 - `go test ./...` avec couverture minimum (>70%).
 - `staticcheck ./...`
 - **Pas d'import vers `cmd/`** depuis `platform/` ou `kernel/` (script de lint custom).
-- **Migrations préfixées correctement** : `find platform/*/migrations -name '*.sql' | grep -v '<package>_'` doit retourner vide.
+- **Migrations conformes** : `find platform/*/migrations -name '*.sql'` ne contient que des fichiers `<NNN>_<description>.{up,down}.sql` (NNN strictement numérique, requis par `iofs`).
 - **Pas d'`init()` exporté** : grep sur les packages `platform/`.
 - **`go doc` sans warning** sur chaque package.
 
@@ -323,7 +322,7 @@ Le pipeline CI du repo `AgileFactory/kernel` vérifie :
 ## **Drawbacks**
 
 1. **Verbosité initiale** : chaque package porte sa Config + Module + RegisterRoutes, là où un framework type wire/dig automatiserait. Justifié par la lisibilité (le consommateur voit exactement ce qui se passe dans son `main.go`) et par l'absence de magie compile-time.
-2. **Migrations cross-package complexes** : si `membership` dépend de `auth.users`, l'ordre d'application des migrations doit être déterministe. Mitigation : le `migrator` ordonne par préfixe alphabétique (`auth_001` < `membership_001`), et les dépendances cross-package sont documentées dans la RFC du package consommateur.
+2. **Migrations cross-package complexes** : si `membership` dépend de `auth.users`, l'ordre d'application des migrations doit être déterministe. Mitigation : `migrator.Run` traite les sources **dans l'ordre fourni par le consommateur** (slice `[]migrator.Source`). Les dépendances cross-package sont documentées dans la RFC du package consommateur, et le `main.go` du SaaS consommateur encode l'ordre.
 3. **Friction pour les hot fixes** : un bug dans `platform/auth` nécessite un tag de release pour propager aux SaaS consommateurs. Mitigation : `replace` dans `go.mod` pour le dev local, branches de hotfix taguées rapidement.
 4. **Pas adapté pour les packages très petits** (1 fichier). Mitigation : ne pas créer de package si le périmètre ne le justifie pas — préférer un sous-dossier dans un package plus large.
 
@@ -363,14 +362,20 @@ Rejeté. Argumentation :
 
 ## **Plan d'adoption**
 
-Cette RFC est **fondatrice** pour la restructuration packaging (P0-0 du plan de spécialisation). Adoption :
+Cette RFC est **fondatrice** pour la restructuration packaging (P0-0 du plan de spécialisation). État d'adoption :
 
-1. **P0-0** : déplacer `backend/internal/{kernel,platform,delivery}/` vers la racine du repo, renommer le module Go en `github.com/AgileFactory/kernel`.
-2. **P0-0b** : refactor des plateformes existantes (`auth`, `tenant`, `membership`, `audit`) en pattern Module autonome.
-3. **P0-0c** : déplacer les migrations sous `platform/<feature>/migrations/` avec préfixe `<feature>_`, exposer `embed.FS`.
-4. **P0-15** : mettre en place les vérifications CI (lint imports, format migrations, no-init).
-5. **P0-14** : tag `v0.1.0` une fois les 4 plateformes existantes conformes au contrat.
+1. **P0-0a (DONE)** : `backend/internal/{kernel,platform,delivery}/` déplacés à la racine, module renommé `github.com/AgileFactory/kernel`. Commit `0ebe3d5`.
+2. **P0-0b (DONE)** : refactor des 4 plateformes (`auth`, `tenant`, `membership`, `audit`) en pattern Module autonome. Interface `audit.EventLogger` introduite ; champ `audit` renommé `auditLogger` dans les consumers ; `bootstrap/container.go` supprimé au profit d'une composition explicite dans `examples/saas-b2b/main.go`.
+3. **P0-0c (DONE)** : migrations déplacées sous `platform/<feature>/migrations/`, exposées via `embed.FS`, composées via `migrator.Run([]migrator.Source{...})` avec table de versions par-package (`schema_migrations_<name>`).
+4. **P0-15 (TODO)** : mettre en place les vérifications CI (lint imports, format migrations, no-init).
+5. **P0-14 (TODO)** : tag `v0.1.0` une fois P0-8 à P0-12 terminés (outbox + signup-owner + accept-invite + email verification + refresh tokens).
 6. Toute nouvelle plateforme (sso, billing, end_customers, etc.) suit le contrat dès sa création.
+
+### Écarts par rapport à la première rédaction de la RFC
+
+- **Préfixe `<feature>_` dans les noms de fichiers migration** : initialement prévu, abandonné car incompatible avec le parser `iofs` de `golang-migrate` (exige un préfixe numérique strict). L'isolation par `embed.FS` par-package rend ce préfixe redondant.
+- **Signature `migrator.Run(db, []embed.FS)`** : ajustée en `migrator.Run(databaseURL, []migrator.Source{Name, FS, Path})`. Le nom logique est nécessaire pour scope la table de versions (`x-migrations-table=schema_migrations_<name>`).
+- **Split `<feature>.go` / `config.go`** : non-appliqué pour l'instant (les 4 plateformes existantes ont leur `Config` dans `<feature>.go`, fichiers de moins de 100 lignes). À splitter quand un Config dépasse 30 lignes ou nécessite `applyDefaults`/`validate`.
 
 ---
 
