@@ -1,448 +1,258 @@
-# Architecture Technique — Lokatik SaaS
+# Architecture — `AgileFactory/kernel`
 
-## Vue d'ensemble
+> **`kernel`** est une bibliothèque Go que les repos SaaS de l'organisation **Agile Factory** importent pour bootstrapper rapidement leurs produits. Ce document décrit le socle technique, la disposition des packages, et la façon dont les modules s'assemblent dans un binaire consommateur.
 
-Lokatik repose sur une **architecture 3-tiers classique** adaptée aux contraintes du marché sénégalais :
+**Pas une application à forker.** Le repo est un monorepo de **packages importables** :
+```
+github.com/AgileFactory/kernel/kernel/*    // infra transverse
+github.com/AgileFactory/kernel/platform/*  // briques SaaS réutilisables
+github.com/AgileFactory/kernel/delivery/*  // helpers HTTP partagés
+```
+
+Chaque produit SaaS garde son propre `main.go` + ses modules métier locaux, et compose les packages `kernel` dont il a besoin via `go get`.
+
+---
+
+## 1. Stack technique
 
 | Couche | Technologie | Rôle |
-|--------|------------|------|
-| **Présentation** | React 18 (Vite + TypeScript + TailwindCSS) | SPA servie en statique |
-| **API** | Rust (Axum + Tokio + SQLx) | Serveur REST JSON |
-| **Données** | PostgreSQL 16 | Stockage relationnel |
+|---|---|---|
+| **Langage** | Go 1.25 | Type-safe, stdlib HTTP, `embed.FS`, generics |
+| **HTTP router** | `net/http` (stdlib) | Zéro lock-in, audit-friendly (ADR-0001) |
+| **Données** | PostgreSQL 16 + `jackc/pgx/v5` | Driver natif Postgres, `pgxpool` |
+| **Migrations** | `golang-migrate/v4` + `iofs` | SQL embarqué par-package, version-tracking séparé (RFC-0038) |
+| **Logging** | `log/slog` (stdlib) | Logging structuré, fan-out (ADR-0005) |
+| **Auth** | JWT HS256 (stdlib `crypto/*`) | Tokens internes ; RS256 + JWKS prévus en P1 (RFC-0028) |
+| **Mots de passe** | `bcrypt` | Coût configurable par module |
+| **Distribution** | Module Go privé (GOPRIVATE) | `go get github.com/AgileFactory/kernel@vX.Y.Z` |
 
-L'application est conteneurisée via **Docker** et orchestrée avec **Docker Compose** pour simplifier le déploiement sur VPS.
-
----
-
-## Diagramme C4 — Contexte
-
-```mermaid
-C4Context
-    title Diagramme de Contexte — Lokatik
-
-    Person(user, "Gestionnaire Immobilier", "Agent ou propriétaire gérant des biens locatifs")
-
-    System(spa, "Lokatik SPA", "Application web React pour la gestion locative")
-    System(api, "Lokatik API", "API REST Rust/Axum gérant la logique métier")
-    SystemDb(db, "PostgreSQL", "Base de données relationnelle")
-
-    System_Ext(sms, "Orange SMS API", "Envoi de SMS aux locataires")
-    System_Ext(orange, "Orange Money API", "Paiements mobile money Orange")
-    System_Ext(wave, "Wave API", "Paiements mobile money Wave")
-    System_Ext(whatsapp, "WhatsApp Business API", "Notifications WhatsApp")
-
-    Rel(user, spa, "Utilise", "HTTPS")
-    Rel(spa, api, "Appelle", "REST/JSON")
-    Rel(api, db, "Lit/Écrit", "SQL/TCP")
-    Rel(api, sms, "Envoie SMS", "HTTPS")
-    Rel(api, orange, "Initie paiement", "HTTPS")
-    Rel(api, wave, "Initie paiement", "HTTPS")
-    Rel(api, whatsapp, "Envoie message", "HTTPS")
-```
+Aucun framework HTTP tiers : la stack est volontairement légère pour faciliter les audits enterprise et limiter la surface de dépendances.
 
 ---
 
-## Diagramme C4 — Conteneurs
+## 2. Architecture en 3 couches (Clean Architecture)
 
-```mermaid
-C4Container
-    title Diagramme de Conteneurs — Lokatik
-
-    Person(user, "Gestionnaire Immobilier")
-
-    Container_Boundary(frontend, "Frontend") {
-        Container(spa, "React SPA", "React 18, Vite, TypeScript, TailwindCSS", "Interface utilisateur responsive, gestion d'état avec Zustand, routing avec React Router v6")
-    }
-
-    Container_Boundary(backend, "Backend") {
-        Container(api, "Axum API Server", "Rust, Axum, Tokio, SQLx", "API REST avec authentification JWT, validation métier, génération PDF")
-        Container(worker, "Background Worker", "Tokio tasks", "Tâches asynchrones : rappels SMS, détection impayés, notifications")
-    }
-
-    Container_Boundary(data, "Data") {
-        ContainerDb(db, "PostgreSQL 16", "SQL", "Données métier : organisations, biens, locataires, baux, paiements")
-    }
-
-    Rel(user, spa, "Utilise", "HTTPS / Port 443")
-    Rel(spa, api, "Appelle", "REST JSON / Port 8080")
-    Rel(api, db, "Requêtes", "SQLx / Port 5432")
-    Rel(worker, db, "Requêtes", "SQLx / Port 5432")
-```
-
----
-
-## Description des couches
-
-### 1. Couche Présentation (Frontend)
-
-| Aspect | Choix technique | Justification |
-|--------|----------------|---------------|
-| **Framework** | React 18 | Écosystème mature, large communauté, facilité de recrutement |
-| **Bundler** | Vite 5 | HMR ultra-rapide, build optimisé, configuration minimale |
-| **Langage** | TypeScript 5 | Typage statique, meilleure maintenabilité, autocomplétion IDE |
-| **État global** | Zustand | Léger (~1KB), API simple, pas de boilerplate comme Redux |
-| **Routing** | React Router v6 | Standard de facto, routes imbriquées, lazy loading |
-| **Styles** | TailwindCSS 3 | Utility-first, design system cohérent, purge CSS en production |
-| **Client HTTP** | Axios | Intercepteurs pour JWT, gestion d'erreurs centralisée |
-| **Formulaires** | React Hook Form + Zod | Validation performante côté client, schémas réutilisables |
-| **Tableaux** | TanStack Table | Pagination, tri, filtres côté serveur |
-| **PDF** | @react-pdf/renderer | Génération de quittances côté client si nécessaire |
-
-**Structure du projet frontend :**
+Chaque `platform/<feature>` suit le même découpage (ADR-0002) :
 
 ```
-frontend/
-├── src/
-│   ├── api/              # Clients Axios par domaine
-│   ├── components/       # Composants réutilisables (UI kit)
-│   │   ├── ui/           # Boutons, inputs, modals, tables
-│   │   └── layout/       # Header, Sidebar, MainLayout
-│   ├── features/         # Modules métier
-│   │   ├── auth/         # Login, Register, hooks useAuth
-│   │   ├── properties/   # CRUD biens immobiliers
-│   │   ├── tenants/      # CRUD locataires
-│   │   ├── leases/       # Gestion baux
-│   │   ├── payments/     # Suivi paiements
-│   │   └── dashboard/    # Tableau de bord
-│   ├── hooks/            # Hooks personnalisés
-│   ├── lib/              # Utilitaires, config Axios
-│   ├── stores/           # Stores Zustand
-│   ├── types/            # Types TypeScript partagés
-│   └── routes/           # Configuration React Router
-├── public/
-├── index.html
-├── vite.config.ts
-├── tailwind.config.js
-└── tsconfig.json
+platform/<feature>/
+├── <feature>.go                # API publique : Module + Config + New + RegisterRoutes
+├── domain/                     # entities, value objects, repository INTERFACES
+├── usecase/                    # use cases (1 fichier par action, tests inclus)
+├── infrastructure/             # implémentations concrètes (postgres, services)
+├── delivery/http/              # handlers HTTP, DTOs, RegisterRoutes
+└── migrations/                 # *.sql embarqués via //go:embed
 ```
 
-### 2. Couche API (Backend Rust)
+**Règle de dépendance** : `delivery → usecase → domain`. `infrastructure` implémente les interfaces de `domain`. Les couches supérieures ne connaissent jamais d'implémentation concrète — uniquement des interfaces (testabilité + swap d'impl).
 
-| Aspect | Choix technique | Justification |
-|--------|----------------|---------------|
-| **Framework web** | Axum 0.7 | Performant, ergonomique, intégré à l'écosystème Tower |
-| **Runtime async** | Tokio | Standard Rust pour l'async, multi-threadé |
-| **ORM / SQL** | SQLx 0.7 | Requêtes vérifiées à la compilation, pas d'ORM lourd |
-| **Authentification** | jsonwebtoken + Argon2 | JWT HS256 pour les tokens, Argon2id pour le hashing |
-| **Middleware** | tower-http | CORS, tracing/logging, compression, rate limiting |
-| **Sérialisation** | serde + serde_json | Standard Rust, dérivation automatique |
-| **Validation** | validator | Validation déclarative des structs d'entrée |
-| **Erreurs** | thiserror + anyhow | Erreurs typées pour le domaine, anyhow pour l'infra |
-| **PDF** | printpdf ou genpdf | Génération de quittances et contrats |
-| **Logging** | tracing + tracing-subscriber | Logging structuré, compatible OpenTelemetry |
-| **UUID** | uuid v4 | Identifiants universels pour toutes les entités |
+### Pattern Module autonome (RFC-0038)
 
-**Structure du projet backend :**
+Toute plateforme expose une racine homogène :
 
-```
-backend/
-├── src/
-│   ├── main.rs                 # Point d'entrée, configuration serveur
-│   ├── config.rs               # Chargement configuration (.env)
-│   ├── errors.rs               # Types d'erreurs applicatives
-│   ├── extractors/             # Extracteurs Axum personnalisés
-│   │   └── auth.rs             # Extraction et validation JWT
-│   ├── handlers/               # Contrôleurs HTTP
-│   │   ├── auth.rs             # Register, Login, Refresh, Me
-│   │   ├── properties.rs       # CRUD biens
-│   │   ├── tenants.rs          # CRUD locataires
-│   │   ├── leases.rs           # CRUD baux
-│   │   ├── payments.rs         # CRUD paiements
-│   │   └── dashboard.rs        # Agrégations tableau de bord
-│   ├── models/                 # Structs de domaine (entités)
-│   │   ├── organization.rs
-│   │   ├── user.rs
-│   │   ├── property.rs
-│   │   ├── tenant.rs
-│   │   ├── lease.rs
-│   │   └── payment.rs
-│   ├── repositories/           # Accès données (requêtes SQLx)
-│   │   ├── organization_repo.rs
-│   │   ├── user_repo.rs
-│   │   ├── property_repo.rs
-│   │   ├── tenant_repo.rs
-│   │   ├── lease_repo.rs
-│   │   └── payment_repo.rs
-│   ├── services/               # Logique métier
-│   │   ├── auth_service.rs
-│   │   ├── property_service.rs
-│   │   ├── lease_service.rs
-│   │   ├── payment_service.rs
-│   │   └── notification_service.rs
-│   ├── middleware/             # Middleware Tower
-│   │   ├── auth.rs            # Vérification JWT
-│   │   └── org_context.rs     # Injection contexte organisation
-│   └── routes.rs              # Définition des routes
-├── migrations/                # Migrations SQLx
-│   ├── 001_create_organizations.sql
-│   ├── 002_create_users.sql
-│   ├── 003_create_properties.sql
-│   ├── 004_create_tenants.sql
-│   ├── 005_create_leases.sql
-│   └── 006_create_payments.sql
-├── Cargo.toml
-├── Cargo.lock
-└── .env.example
-```
-
-### 3. Couche Logique Métier
-
-La logique métier est isolée dans la couche **services**, séparée des handlers HTTP et des repositories :
-
-```
-Handler (HTTP) → Service (Métier) → Repository (SQL)
-     ↑                  ↑                  ↑
-  Validation         Règles de          Requêtes
-  des entrées        gestion            PostgreSQL
-```
-
-**Principes :**
-
-- **Service Layer Pattern** : Chaque domaine (auth, properties, leases, payments) a son service dédié
-- **Validation de domaine** : Les règles métier sont vérifiées dans les services, pas dans les handlers
-- **Repository Pattern** : Les requêtes SQL sont encapsulées dans des repositories, facilitant les tests
-- **Gestion d'erreurs avec `thiserror`** : Chaque erreur métier a un type dédié qui se mappe vers un code HTTP
-
-```rust
-// Exemple de type d'erreur métier
-#[derive(Debug, thiserror::Error)]
-pub enum LeaseError {
-    #[error("Le bien {0} a déjà un bail actif")]
-    PropertyAlreadyLeased(Uuid),
-
-    #[error("La date de fin doit être postérieure à la date de début")]
-    InvalidDateRange,
-
-    #[error("Le montant du loyer doit être positif")]
-    InvalidRentAmount,
-
-    #[error("Bail non trouvé")]
-    NotFound,
+```go
+type Config struct {
+    Repo        Repository         // injecté par le consommateur
+    AuditLogger audit.EventLogger  // interface inter-package
+    Logger      *slog.Logger
+    // ...options
 }
+
+type Module struct { /* use cases exposés */ }
+
+func New(cfg Config) *Module               { /* ... */ }
+func (m *Module) RegisterRoutes(mux *http.ServeMux) { /* ... */ }
+
+//go:embed migrations/*.sql
+var Migrations embed.FS
 ```
 
-### 4. Couche Données
-
-| Aspect | Détail |
-|--------|--------|
-| **SGBD** | PostgreSQL 16 |
-| **Driver** | SQLx (async, compile-time checked) |
-| **Migrations** | Fichiers SQL versionnés dans `migrations/` |
-| **Types** | UUID pour les PKs, TIMESTAMPTZ pour les dates, BIGINT pour les montants (en FCFA, pas de décimales) |
-| **Multi-tenant** | Isolation par `organization_id` sur chaque table métier |
-| **Triggers** | `updated_at` automatique via trigger PostgreSQL |
-| **Index** | Index sur les clés étrangères et les colonnes de recherche fréquentes |
-
-### 5. Infrastructure
-
-| Composant | Technologie |
-|-----------|------------|
-| **Conteneurisation** | Docker multi-stage builds (builder + runtime) |
-| **Orchestration** | Docker Compose (dev + prod) |
-| **Reverse proxy** | Nginx |
-| **SSL** | Let's Encrypt via Certbot |
-| **CI/CD** | GitHub Actions |
-| **Hosting** | VPS (Hetzner, DigitalOcean, ou Contabo) |
-
-**Dockerfile backend (multi-stage) :**
-
-```dockerfile
-# Stage 1: Build
-FROM rust:1.77-slim AS builder
-WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-COPY src/ src/
-COPY migrations/ migrations/
-RUN cargo build --release
-
-# Stage 2: Runtime
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/lokatik-api /usr/local/bin/
-EXPOSE 8080
-CMD ["lokatik-api"]
-```
+Aucun `init()`, aucune variable globale mutable, aucun singleton : tout passe par la `Config`.
 
 ---
 
-## Flux principal — Diagramme de séquence
+## 3. Plan du repo
 
-```mermaid
-sequenceDiagram
-    actor G as Gestionnaire
-    participant SPA as React SPA
-    participant API as Axum API
-    participant DB as PostgreSQL
-    participant SMS as Orange SMS API
-
-    Note over G, SMS: Flux : Créer un bail → Enregistrer un paiement → Générer une quittance
-
-    G->>SPA: Remplit le formulaire de bail
-    SPA->>API: POST /api/v1/leases
-    API->>DB: Vérifie que le bien n'a pas de bail actif
-    DB-->>API: OK, pas de bail actif
-    API->>DB: INSERT INTO leases (...)
-    DB-->>API: Bail créé (id, dates, montant)
-    API->>DB: UPDATE properties SET status = 'rented'
-    DB-->>API: OK
-    API-->>SPA: 201 Created {lease}
-    SPA-->>G: Affiche le bail créé
-
-    Note over G, SMS: Le locataire paie son loyer
-
-    G->>SPA: Enregistre un paiement
-    SPA->>API: POST /api/v1/payments
-    API->>DB: INSERT INTO payments (lease_id, amount, method, ...)
-    DB-->>API: Paiement créé
-    API->>DB: Vérifie si le mois est entièrement payé
-    DB-->>API: Montant total atteint
-    API-->>SPA: 201 Created {payment}
-    SPA-->>G: Paiement confirmé
-
-    Note over G, SMS: Génération de la quittance
-
-    G->>SPA: Clique "Générer quittance"
-    SPA->>API: POST /api/v1/payments/{id}/receipt
-    API->>DB: Récupère détails paiement + bail + locataire + bien
-    DB-->>API: Données complètes
-    API->>API: Génère le PDF de quittance
-    API-->>SPA: 200 OK {receipt_url}
-    SPA-->>G: Télécharge la quittance PDF
-
-    G->>SPA: Clique "Envoyer au locataire"
-    SPA->>API: POST /api/v1/notifications/send
-    API->>SMS: Envoie SMS avec lien de téléchargement
-    SMS-->>API: SMS envoyé
-    API-->>SPA: 200 OK
-    SPA-->>G: "Quittance envoyée par SMS"
 ```
+kernel/                                 # repo "AgileFactory/kernel"
+├── go.mod                              # module github.com/AgileFactory/kernel
+├── kernel/                             # infra transverse importable
+│   ├── auth/                           # context, JWT helpers
+│   ├── config/                         # chargement env (godotenv)
+│   ├── errors/                         # AppError + codes (ADR-0004)
+│   ├── logger/                         # slog fan-out (ADR-0005)
+│   ├── migrator/                       # composeur embed.FS → golang-migrate
+│   ├── response/                       # JSON HTTP helper
+│   ├── server/                         # HTTP server bootstrap
+│   └── validator/                      # email, uuid, etc.
+├── platform/                           # briques SaaS réutilisables
+│   ├── audit/                          # audit trail (RFC-0005)
+│   ├── auth/                           # authentification (RFC-0007 → RFC-0018)
+│   ├── membership/                     # cycle de vie membership (RFC-0004)
+│   └── tenant/                         # organisations tenants (RFC-0008)
+├── delivery/http/                      # middlewares HTTP partagés
+│   └── middleware/                     # Auth, TenantContext, Logger, Recovery
+├── examples/                           # apps consommatrices exemples
+│   └── saas-b2b/                       # MVP B2B minimal (≈100 lignes de main.go)
+└── docs/                               # RFCs, ADRs, architecture
+```
+
+Le code n'est **pas** sous `internal/` : tout est importable depuis un repo consommateur externe. Le path d'import débute toujours par `github.com/AgileFactory/kernel/...`.
 
 ---
 
-## Intégration Mobile Money
+## 4. Multi-tenancy (ADR-0003)
 
-### Orange Money
+**Modèle : shared schema + memberships.**
 
-```mermaid
-sequenceDiagram
-    actor L as Locataire
-    participant SPA as React SPA
-    participant API as Lokatik API
-    participant OM as Orange Money API
+- Une seule base PostgreSQL, un seul schéma `public`.
+- `tenants(id, slug, name, is_active, …)` : la table des organisations clientes.
+- `users(id, email, password_hash, …)` : table globale, sans `tenant_id`.
+- `memberships(user_id, tenant_id, role, status, …)` : la relation many-to-many avec rôle (`OWNER/ADMIN/AGENT/VIEWER`) et statut (`PENDING/ACTIVE/REVOKED`).
+- Le `tenant_id` est propagé via `context.Context` (middleware `TenantContext`).
+- Toute requête métier filtre par `tenant_id` au niveau du repository.
 
-    L->>SPA: Choisit "Payer par Orange Money"
-    SPA->>API: POST /api/v1/payments/orange-money/initiate
-    API->>OM: POST /merchant/v1/payment (amount, phone, callback_url)
-    OM-->>API: {payment_token, redirect_url}
-    API-->>SPA: {redirect_url}
-    SPA->>L: Redirige vers page de confirmation Orange Money
-
-    Note over L, OM: Le locataire confirme sur son téléphone
-
-    OM->>API: POST /webhook/orange-money (status: SUCCESS)
-    API->>API: Vérifie signature du webhook
-    API->>API: Enregistre le paiement en base
-    API-->>OM: 200 OK
-
-    L->>SPA: Retour sur Lokatik
-    SPA->>API: GET /api/v1/payments/{id}
-    API-->>SPA: {status: "completed"}
-    SPA-->>L: "Paiement confirmé"
-```
-
-### Wave
-
-```mermaid
-sequenceDiagram
-    actor L as Locataire
-    participant SPA as React SPA
-    participant API as Lokatik API
-    participant W as Wave API
-
-    L->>SPA: Choisit "Payer par Wave"
-    SPA->>API: POST /api/v1/payments/wave/initiate
-    API->>W: POST /v1/checkout (amount, currency: XOF, callback_url)
-    W-->>API: {checkout_id, wave_launch_url}
-    API-->>SPA: {wave_launch_url}
-    SPA->>L: Ouvre Wave (deep link mobile ou QR code)
-
-    Note over L, W: Le locataire confirme dans l'app Wave
-
-    W->>API: POST /webhook/wave (event: checkout.completed)
-    API->>API: Vérifie signature HMAC du webhook
-    API->>API: Enregistre le paiement en base
-    API-->>W: 200 OK
-
-    L->>SPA: Retour sur Lokatik
-    SPA->>API: GET /api/v1/payments/{id}
-    API-->>SPA: {status: "completed"}
-    SPA-->>L: "Paiement confirmé"
-```
+**Defense-in-depth prévu (P2)** : activation optionnelle de **Row-Level Security PostgreSQL** par tenant (critique en B2B2C, cf. plan §10).
 
 ---
 
-## Stratégie de notifications
+## 5. Audit trail (RFC-0005, en cours d'amendement)
 
-### SMS (Orange SMS API)
+- Table `audit_logs(id, tenant_id, actor_id, action, target_type, target_id, metadata, created_at)`.
+- Chaque action sensible (création tenant, login, invitation, révocation) émet un `audit.LogEventParams` via l'interface `audit.EventLogger`.
+- **Mode actuel : best-effort fire-and-forget** (ADR-0009). Le retour de `Execute` est asynchrone et ne fait pas échouer la transaction métier.
+- **Évolution P0-8** : remplacer par un **outbox transactionnel** (RFC-0015 v1.1) — l'audit log est inséré dans la même transaction que l'opération métier, puis dispatché en arrière-plan (at-least-once, requis SOC2/ISO27001).
 
-- **Rappels de loyer** : Envoi automatique J-5 et J-1 avant l'échéance
-- **Confirmation de paiement** : SMS au locataire après réception du paiement
-- **Quittance disponible** : Lien de téléchargement de la quittance
-- **Alertes impayés** : Notification au gestionnaire si impayé > 5 jours
-
-### WhatsApp (Business API)
-
-- Canal complémentaire au SMS pour les locataires ayant WhatsApp
-- Templates pré-approuvés pour les rappels et confirmations
-- Envoi de documents PDF directement dans la conversation
-
-### Architecture des notifications
-
-```mermaid
-flowchart LR
-    A[Événement métier] --> B{Type de notification}
-    B -->|Rappel loyer| C[SMS + WhatsApp]
-    B -->|Confirmation paiement| D[SMS]
-    B -->|Quittance| E[SMS avec lien]
-    B -->|Alerte impayé| F[SMS au gestionnaire]
-
-    C --> G[Queue async Tokio]
-    D --> G
-    E --> G
-    F --> G
-
-    G --> H[Orange SMS API]
-    G --> I[WhatsApp Business API]
-```
+Les consumers (tenant, membership, auth) dépendent de l'**interface** `audit.EventLogger`, pas du type concret — ce qui permet de swapper l'implémentation sans toucher aux use cases.
 
 ---
 
-## Sécurité
+## 6. Migrations embarquées (RFC-0038)
 
-### Authentification et autorisation
+Chaque package porte ses propres migrations sous `platform/<feature>/migrations/`, exposées par un `embed.FS` au niveau du package. Le consommateur compose dans l'ordre des dépendances :
+
+```go
+migrator.Run(cfg.DatabaseURL, []migrator.Source{
+    {Name: "tenant",     FS: tenant.Migrations,     Path: "migrations"},
+    {Name: "auth",       FS: auth.Migrations,       Path: "migrations"},
+    {Name: "membership", FS: membership.Migrations, Path: "migrations"},
+    {Name: "audit",      FS: audit.Migrations,      Path: "migrations"},
+})
+```
+
+Chaque source a sa propre table de versions `schema_migrations_<name>` (via le query param `x-migrations-table` du driver postgres), ce qui permet à chaque package de versionner ses migrations indépendamment.
+
+---
+
+## 7. Profils consommateurs
+
+Le boilerplate sert deux profils prioritaires et un futur (plan §2) :
+
+| Profil | Priorité | Surface HTTP | Activation |
+|---|---|---|---|
+| **SaaS B2B** | P0/P1 | `/api/v1/*` (memberships, JWT) | défaut |
+| **B2B2C** | P1bis | + `/customer/v1/*` (end-customers d'un tenant) | `B2B2C_ENABLED=true` |
+| **BaaS** *(différé)* | P2+ | + `/public/v1/*` (API Keys, calendar versioning) | `BAAS_ENABLED=true` (futur) |
+
+Un SaaS B2B pur garde les deux flags à `false` sans surcoût : les plateformes additionnelles ne sont pas chargées dans le `main.go`.
+
+---
+
+## 8. Auth, RBAC, sécurité
 
 | Mécanisme | Détail |
-|-----------|--------|
-| **Tokens** | JWT signé HS256, expiration 24h |
-| **Refresh** | Token de rafraîchissement, expiration 7 jours |
-| **Hashing** | Argon2id pour les mots de passe (résistant aux attaques GPU) |
-| **Multi-tenant** | Chaque requête est filtrée par `organization_id` extrait du JWT |
-| **Rôles** | `admin` (gestionnaire principal), `agent` (collaborateur), `viewer` (lecture seule) |
+|---|---|
+| **Tokens** | JWT HS256 actuellement (RFC-0007). RS256 + JWKS prévus en P1 (RFC-0028) pour intégration SSO. |
+| **Refresh tokens** | Prévu en P0-10 (table `refresh_tokens` révocable). |
+| **Hashing** | `bcrypt` avec coût par défaut (configurable par module). |
+| **Multi-tenant** | `tenant_id` extrait du JWT ou du Host header (custom domain B2B2C), propagé via `context.Context`. |
+| **Rôles** | `ROLE_OWNER` (non-révocable), `ROLE_ADMIN`, `ROLE_AGENT`, `ROLE_VIEWER` — vérifiés au niveau use case. |
+| **RBAC granulaire** | `platform/permission/` (RFC-0010), scopes alignés API Keys, à implémenter en P1. |
+| **SSO Enterprise** | `platform/sso/` OIDC + SAML, P1 (RFC-0021). |
 
-### Protection des API
+### Protection des API (en place ou prévu)
 
-| Mesure | Implémentation |
-|--------|---------------|
-| **CORS** | `tower-http::CorsLayer` — origines autorisées uniquement |
-| **Rate limiting** | `tower_governor` — 100 req/min par IP, 10 req/min pour login |
-| **Validation** | `validator` crate — toutes les entrées sont validées |
-| **SQL Injection** | Impossible avec SQLx (requêtes paramétrées et vérifiées à la compilation) |
-| **HTTPS** | Obligatoire en production via Nginx + Let's Encrypt |
-| **Headers** | `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security` |
+- **CORS** : middleware HTTP standard, origines configurables côté consommateur.
+- **Rate limiting** : `kernel/ratelimit/` prévu en P1 (RFC-0024), réutilisable pour `/customer/v1/auth/*` et la future surface BaaS.
+- **HTTPS** : gestion à l'extérieur du binaire (reverse proxy / load-balancer / Cloudflare).
+- **SQL injection** : impossible avec `pgx` (requêtes paramétrées systématiques).
+- **Logs** : aucune donnée personnelle identifiable, propagation de `X-Request-ID` (UUID v7) — RFC-0029.
 
-### Données sensibles
+---
 
-- Les mots de passe ne sont jamais stockés en clair (Argon2id)
-- Les tokens JWT ne contiennent que `user_id`, `organization_id`, et `role`
-- Les clés API (Orange Money, Wave, SMS) sont stockées en variables d'environnement
-- Les logs ne contiennent jamais de données personnelles identifiables
+## 9. Wiring type — exemple `examples/saas-b2b/main.go`
+
+```go
+// Repos en dehors des modules : un seul instance partagée entre plateformes
+// (audit handler a besoin du repo membership pour la perm-check HTTP, tandis
+// que membership a besoin de audit.EventLogger).
+auditRepo  := auditinfra.NewPostgresAuditRepository(db)
+tenantRepo := tenantinfra.NewPostgresTenantRepository(db)
+memberRepo := memberinfra.NewPostgresMembershipRepository(db)
+userRepo   := authinfra.NewPostgresUserRepository(db)
+
+// Modules — composition explicite, sans framework de DI
+auditMod := audit.New(audit.Config{
+    Repo: auditRepo, MembershipRepo: memberRepo, Logger: log,
+})
+tenantMod := tenant.New(tenant.Config{
+    Repo: tenantRepo, AuditLogger: auditMod.EventLogger(), Logger: log,
+})
+memberMod := membership.New(membership.Config{
+    Repo: memberRepo, TenantRepo: tenantRepo,
+    AuditLogger: auditMod.EventLogger(), Logger: log,
+})
+authMod := auth.New(auth.Config{
+    UserRepo: userRepo, TenantRepo: tenantRepo, MembershipRepo: memberRepo,
+    MembershipListUC: memberMod.ListUC,
+    AuditLogger: auditMod.EventLogger(),
+    JWTSecret: cfg.JWTSecret, TokenLifespan: cfg.TokenLifespan,
+    Logger: log,
+})
+
+mux := http.NewServeMux()
+auditMod.RegisterRoutes(mux)
+tenantMod.RegisterRoutes(mux)
+memberMod.RegisterRoutes(mux)
+authMod.RegisterRoutes(mux)
+```
+
+Le consommateur lit ce wiring **en clair** dans son `main.go` : pas de magie, pas de `wire`/`fx`. C'est le coût accepté pour un audit facile et un débuggage direct (ADR-0008).
+
+---
+
+## 10. Évolution prévue (plan de spécialisation)
+
+Le plan complet est dans [`/docs/plan.txt`](../plan.txt) (référence vers `/home/zone01/.claude/plans/on-se-specialisera-que-tranquil-gray.md`). Synthèse :
+
+- **P0 (~4 sem)** — fondations : restructuration packaging (DONE), pattern Module autonome (DONE), migrations embarquées (DONE), RFCs 0018-0028, outbox `kernel/events`, refactor auth/tenant/membership pour signup-owner/accept-invite, tag `v0.1.0`.
+- **P1 (~5 sem)** — plateformes core : `billing`, `notification`, `permission`, `user`, `sso` + JWKS, observability (OTel + Prometheus), tag `v0.2.0`.
+- **P1bis (~5 sem)** — B2B2C : `end_customers`, `customer_auth`, `customer_billing` (Merchant Mode Stripe Connect + Wave/Orange/Free Marchand), `customer_notifications`, `white_label` (custom domains + branding), mux `/customer/v1/*`, RLS PG obligatoire, tag `v0.3.0`.
+- **P2+** — BaaS différé : `apikey`, `webhooks_out`, `usage_metering`, `devportal`, SDK generation, migration UUID v4→v7.
+
+Stratégie hybride payment : Stripe (international) + Wave / Orange Money / Free Money (CEDEAO) via adapters `PaymentProcessor` interchangeables (RFC-0020). Notifications multi-canal par profil : email-first pour memberships B2B, multi-canal large (Email + SMS + WhatsApp + Push) pour end-customers B2B2C (RFC-0019 + RFC-0036).
+
+---
+
+## 11. Références
+
+### ADRs (Architecture Decision Records)
+- [ADR-0001](./adrs/0001-Go-Stdlib-HTTP-Router.md) — Go Stdlib HTTP Router
+- [ADR-0002](./adrs/0002-Clean-Architecture-Trois-Niveaux.md) — Clean Architecture 3 niveaux
+- [ADR-0003](./adrs/0003-Multi-Tenancy-Shared-Schema-Memberships.md) — Multi-tenancy shared schema
+- [ADR-0004](./adrs/0004-Gestion-Erreurs-AppError.md) — Gestion d'erreurs `AppError`
+- [ADR-0005](./adrs/0005-Logging-Fan-Out-Slog.md) — Logging fan-out slog
+- [ADR-0006](./adrs/0006-Migrations-SQL-Golang-Migrate.md) — Migrations SQL
+- [ADR-0007](./adrs/0007-JWT-HS256-Stdlib.md) — JWT HS256 stdlib (→ RFC-0028 RS256 successor)
+- [ADR-0008](./adrs/0008-Injection-Dependances-Manuelle.md) — DI manuelle
+- [ADR-0009](./adrs/0009-Audit-Best-Effort-Platform.md) — Audit best-effort (deprecated par RFC-0015 v1.1)
+- [ADR-0010](./adrs/0010-Pagination-Uniforme-Data-Total.md) — Pagination uniforme
+
+### RFCs fondamentaux
+- [RFC-0002](./rfcs/0002-Create-Boilerplate-for-Agile-Factory.md) — Création du boilerplate
+- [RFC-0004](./rfcs/0004-Platform-Membership-Lifecycle.md) — Lifecycle membership
+- [RFC-0005](./rfcs/0005-Platform-Audit-Trail.md) — Audit trail
+- [RFC-0007](./rfcs/0007-Platform-Auth-Authentification.md) — Auth (amendé par RFC-0018)
+- [RFC-0008](./rfcs/0008-Platform-Tenant-Organisations.md) — Tenant organisations
+- [RFC-0015](./rfcs/0015-Event-Bus-Interne.md) — Event bus / outbox
+- [RFC-0038](./rfcs/0038-Conventions-Package-Reutilisable.md) — Conventions de package

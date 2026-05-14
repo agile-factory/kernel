@@ -6,7 +6,7 @@
 
 ---
 
-## **Status:** `DRAFT`
+## **Status:** `ACCEPTED` *(implémentation prévue P1-1, cf. plan §6)*
 
 ---
 

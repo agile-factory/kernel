@@ -6,7 +6,7 @@
 
 ---
 
-## **Status:** `DRAFT`
+## **Status:** `ACCEPTED` *(Platform Mode prévu P1-2 ; Merchant Mode B2B2C en P1bis-8, cf. plan §6)*
 
 ---
 
