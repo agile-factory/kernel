@@ -3,7 +3,7 @@ package usecase
 import (
 	"context"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/domain"
+	"github.com/AgileFactory/kernel/platform/auth/domain"
 )
 
 // TokenValidator defines how tokens are validated.

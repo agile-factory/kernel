@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/tenant/domain"
+	"github.com/AgileFactory/kernel/platform/tenant/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

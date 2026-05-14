@@ -1,4 +1,4 @@
-module github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend
+module github.com/AgileFactory/kernel
 
 go 1.25.0
 

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	kernelauth "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/auth"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/delivery/http/middleware"
+	kernelauth "github.com/AgileFactory/kernel/kernel/auth"
+	"github.com/AgileFactory/kernel/delivery/http/middleware"
 )
 
 // ─── JWT helpers ──────────────────────────────────────────────────────────────

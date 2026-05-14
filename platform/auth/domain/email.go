@@ -3,7 +3,7 @@ package domain
 import (
 	"strings"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/validator"
+	"github.com/AgileFactory/kernel/kernel/validator"
 )
 
 // Email is a value object representing an email address.

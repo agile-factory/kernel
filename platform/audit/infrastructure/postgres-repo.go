@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
+	"github.com/AgileFactory/kernel/platform/audit/domain"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

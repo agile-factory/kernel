@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/usecase"
-	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
-	memberusecase "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/usecase"
+	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/kernel/response"
+	"github.com/AgileFactory/kernel/platform/auth/usecase"
+	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
+	memberusecase "github.com/AgileFactory/kernel/platform/membership/usecase"
 	"github.com/google/uuid"
 )
 

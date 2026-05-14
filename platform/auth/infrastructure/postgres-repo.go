@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/domain"
+	"github.com/AgileFactory/kernel/platform/auth/domain"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

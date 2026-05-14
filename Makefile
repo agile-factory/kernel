@@ -1,4 +1,7 @@
-.PHONY: dev build test migrate migrate-down migrate-force fmt docker-up docker-down logs clean
+.PHONY: dev build test migrate migrate-down migrate-force fmt tidy docker-up docker-down logs clean install help
+
+APP_NAME := api
+EXAMPLE  := ./examples/saas-b2b
 
 # ============================================================================
 # Development
@@ -10,52 +13,31 @@ dev: ## Start all services with Docker Compose
 dev-detached: ## Start all services in background
 	docker compose up --build -d
 
-dev-backend: ## Start backend only (local)
-	cd backend && make run
-
-dev-frontend: ## Start frontend only (local)
-	cd frontend && npm run dev
+run: ## Run the saas-b2b example locally
+	go run $(EXAMPLE)
 
 # ============================================================================
-# Build
+# Build / Test
 # ============================================================================
 
-build: build-backend build-frontend ## Build all
+build: ## Build the saas-b2b example binary
+	go build -o bin/$(APP_NAME) $(EXAMPLE)
 
-build-backend: ## Build backend (release)
-	cd backend && make build
-
-build-frontend: ## Build frontend
-	cd frontend && npm run build
-
-# ============================================================================
-# Test
-# ============================================================================
-
-test: test-backend test-frontend ## Run all tests
-
-test-backend: ## Run backend tests
-	cd backend && make test
-
-test-frontend: ## Run frontend tests
-	cd frontend && npm test
-
-# ============================================================================
-# Go Tools
-# ============================================================================
+test: ## Run all Go tests
+	go test -v ./...
 
 fmt: ## Format Go code
-	cd backend && make fmt
+	go fmt ./...
 
 tidy: ## Tidy go modules
-	cd backend && make tidy
+	go mod tidy
 
 # ============================================================================
 # Database
 # ============================================================================
 
 DB_URL         ?= $(shell grep '^DATABASE_URL' .env | cut -d '=' -f2-)
-MIGRATIONS_DIR := backend/migrations
+MIGRATIONS_DIR := migrations
 MIGRATE        := $(shell go env GOPATH)/bin/migrate
 
 migrate: ## Apply all pending UP migrations
@@ -71,10 +53,10 @@ migrate-force: ## Force a specific migration version (usage: make migrate-force 
 	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DB_URL)" force $(VERSION)
 
 db-shell: ## Open PostgreSQL shell
-	docker compose exec postgres psql -U lokatik -d lokatik
+	docker compose exec postgres psql -U $${APP_NAME:-myapp} -d $${APP_NAME:-myapp}
 
 db-reset: ## Reset database (drop + recreate + migrate)
-	docker compose exec postgres psql -U lokatik -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+	docker compose exec postgres psql -U $${APP_NAME:-myapp} -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 	$(MAKE) migrate
 
 # ============================================================================
@@ -99,20 +81,14 @@ logs: ## Show all logs
 logs-backend: ## Show backend logs
 	docker compose logs -f backend
 
-logs-frontend: ## Show frontend logs
-	docker compose logs -f frontend
-
 # ============================================================================
 # Utilities
 # ============================================================================
 
 clean: ## Clean build artifacts
-	cd backend && make clean
-	rm -rf frontend/dist frontend/node_modules
+	rm -rf bin/
 
-install: ## Install all dependencies
-	cd backend && make tidy
-	cd frontend && npm install
+install: tidy ## Install all dependencies
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'

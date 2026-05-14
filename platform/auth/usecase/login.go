@@ -3,10 +3,10 @@ package usecase
 import (
 	"context"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
-	auditdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
-	auditusecase "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/domain"
+	"github.com/AgileFactory/kernel/kernel/errors"
+	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
+	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
+	"github.com/AgileFactory/kernel/platform/auth/domain"
 )
 
 // PasswordVerifier defines how passwords should be verified.

@@ -3,7 +3,7 @@ package usecase
 import (
 	"context"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/tenant/domain"
+	"github.com/AgileFactory/kernel/platform/tenant/domain"
 )
 
 // FindTenantUseCase handles retrieval of a tenant by ID or slug.

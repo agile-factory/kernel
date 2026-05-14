@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strconv"
 
-	kernelauth "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/auth"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
-	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
+	kernelauth "github.com/AgileFactory/kernel/kernel/auth"
+	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/kernel/response"
+	"github.com/AgileFactory/kernel/platform/audit/usecase"
+	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
 )
 
 // AuditHandler handles HTTP requests for the audit read model.

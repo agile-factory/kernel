@@ -8,11 +8,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/bootstrap"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/config"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/logger"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/migrator"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/server"
+	"github.com/AgileFactory/kernel/bootstrap"
+	"github.com/AgileFactory/kernel/kernel/config"
+	"github.com/AgileFactory/kernel/kernel/logger"
+	"github.com/AgileFactory/kernel/kernel/migrator"
+	"github.com/AgileFactory/kernel/kernel/server"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

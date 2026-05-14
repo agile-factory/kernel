@@ -3,7 +3,7 @@ package http
 import (
 	"time"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
+	"github.com/AgileFactory/kernel/platform/audit/domain"
 )
 
 // AuditLogResponse is the public JSON representation of an audit log entry.

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
+	"github.com/AgileFactory/kernel/platform/audit/domain"
+	"github.com/AgileFactory/kernel/platform/audit/usecase"
 )
 
 // ─── Mock AuditRepository ─────────────────────────────────────────────────────

@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/tenant/domain"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/tenant/usecase"
+	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/kernel/response"
+	"github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/AgileFactory/kernel/platform/tenant/usecase"
 	"github.com/google/uuid"
 )
 

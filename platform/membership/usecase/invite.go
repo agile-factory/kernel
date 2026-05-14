@@ -4,11 +4,11 @@ import (
 	"context"
 	stderrors "errors"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
-	auditdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
-	auditusecase "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
-	tenantdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/tenant/domain"
+	"github.com/AgileFactory/kernel/kernel/errors"
+	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
+	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
+	"github.com/AgileFactory/kernel/platform/membership/domain"
+	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
 	"github.com/google/uuid"
 )
 

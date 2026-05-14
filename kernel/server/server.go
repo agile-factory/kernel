@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/config"
+	"github.com/AgileFactory/kernel/kernel/config"
 )
 
 // Server is a wrapper around http.Server

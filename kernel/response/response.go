@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
+	"github.com/AgileFactory/kernel/kernel/errors"
 )
 
 // JSON sends a JSON response with the given status code.

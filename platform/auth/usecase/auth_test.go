@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	authdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/domain"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/usecase"
-	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
-	tenantdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/tenant/domain"
-	auditusecase "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
-	auditdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
+	authdomain "github.com/AgileFactory/kernel/platform/auth/domain"
+	"github.com/AgileFactory/kernel/platform/auth/usecase"
+	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
+	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
+	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
+	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
 )
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────

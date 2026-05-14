@@ -3,12 +3,12 @@ package usecase
 import (
 	"context"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
-	auditdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
-	auditusecase "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
-	authdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/auth/domain"
-	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
-	tenantdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/tenant/domain"
+	"github.com/AgileFactory/kernel/kernel/errors"
+	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
+	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
+	authdomain "github.com/AgileFactory/kernel/platform/auth/domain"
+	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
+	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
 	"github.com/google/uuid"
 )
 

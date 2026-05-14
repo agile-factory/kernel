@@ -4,12 +4,12 @@ import (
 	"errors"
 	"net/http"
 
-	kernelauth "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/auth"
-	kernelerrors "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/response"
-	auditdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/domain"
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/audit/usecase"
-	memberdomain "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
+	kernelauth "github.com/AgileFactory/kernel/kernel/auth"
+	kernelerrors "github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/kernel/response"
+	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
+	"github.com/AgileFactory/kernel/platform/audit/usecase"
+	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
 )
 
 // AuditHandlerV2 serves the cursor-based audit-log endpoints under /api/v2/.

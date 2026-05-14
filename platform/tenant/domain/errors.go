@@ -1,6 +1,6 @@
 package domain
 
-import "github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/kernel/errors"
+import "github.com/AgileFactory/kernel/kernel/errors"
 
 // Sentinel errors for the Tenant domain.
 var (

@@ -3,7 +3,7 @@ package usecase
 import (
 	"context"
 
-	"github.com/Cheikh-Nakamoto/Agile-Factory-Boilerplate/backend/internal/platform/membership/domain"
+	"github.com/AgileFactory/kernel/platform/membership/domain"
 )
 
 // ListMembersUseCase retrieves all memberships for a given tenant or user.
