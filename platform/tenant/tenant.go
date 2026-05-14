@@ -5,6 +5,7 @@
 package tenant
 
 import (
+	"embed"
 	"log/slog"
 	"net/http"
 
@@ -13,6 +14,12 @@ import (
 	"github.com/AgileFactory/kernel/platform/tenant/domain"
 	"github.com/AgileFactory/kernel/platform/tenant/usecase"
 )
+
+// Migrations holds the SQL files this platform owns. Consumers compose them
+// via migrator.Run alongside their own modules' migrations.
+//
+//go:embed migrations/*.sql
+var Migrations embed.FS
 
 // Repository re-exports the tenant repository contract for consumers.
 type Repository = domain.TenantRepository

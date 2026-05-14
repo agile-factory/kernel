@@ -4,6 +4,7 @@
 package auth
 
 import (
+	"embed"
 	"log/slog"
 	"net/http"
 	"time"
@@ -17,6 +18,12 @@ import (
 	memberusecase "github.com/AgileFactory/kernel/platform/membership/usecase"
 	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
 )
+
+// Migrations holds the SQL files this platform owns. Consumers compose them
+// via migrator.Run alongside their own modules' migrations.
+//
+//go:embed migrations/*.sql
+var Migrations embed.FS
 
 // UserRepository re-exports the user repository contract for consumers.
 type UserRepository = domain.UserRepository

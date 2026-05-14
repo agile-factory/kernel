@@ -1,4 +1,4 @@
-.PHONY: dev build test migrate migrate-down migrate-force fmt tidy docker-up docker-down logs clean install help
+.PHONY: dev build test fmt tidy docker-up docker-down logs clean install help
 
 APP_NAME := api
 EXAMPLE  := ./examples/saas-b2b
@@ -13,7 +13,7 @@ dev: ## Start all services with Docker Compose
 dev-detached: ## Start all services in background
 	docker compose up --build -d
 
-run: ## Run the saas-b2b example locally
+run: ## Run the saas-b2b example locally (migrations run automatically on boot)
 	go run $(EXAMPLE)
 
 # ============================================================================
@@ -35,29 +35,15 @@ tidy: ## Tidy go modules
 # ============================================================================
 # Database
 # ============================================================================
-
-DB_URL         ?= $(shell grep '^DATABASE_URL' .env | cut -d '=' -f2-)
-MIGRATIONS_DIR := migrations
-MIGRATE        := $(shell go env GOPATH)/bin/migrate
-
-migrate: ## Apply all pending UP migrations
-	@echo "→ Applying migrations from $(MIGRATIONS_DIR)..."
-	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DB_URL)" up
-
-migrate-down: ## Roll back the last migration step
-	@echo "→ Rolling back last migration..."
-	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DB_URL)" down 1
-
-migrate-force: ## Force a specific migration version (usage: make migrate-force VERSION=<n>)
-	@echo "→ Forcing migration version $(VERSION)..."
-	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DB_URL)" force $(VERSION)
+# Migrations are embedded in each platform package via //go:embed and
+# composed in main.go through migrator.Run. Running the binary (or `make run`)
+# applies any pending migrations on boot — there's no separate CLI step.
 
 db-shell: ## Open PostgreSQL shell
 	docker compose exec postgres psql -U $${APP_NAME:-myapp} -d $${APP_NAME:-myapp}
 
-db-reset: ## Reset database (drop + recreate + migrate)
+db-reset: ## Reset database schema (drop + recreate; next app run re-applies migrations)
 	docker compose exec postgres psql -U $${APP_NAME:-myapp} -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-	$(MAKE) migrate
 
 # ============================================================================
 # Docker

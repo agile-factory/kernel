@@ -10,6 +10,7 @@ package audit
 
 import (
 	"context"
+	"embed"
 	"log/slog"
 	"net/http"
 
@@ -18,6 +19,12 @@ import (
 	"github.com/AgileFactory/kernel/platform/audit/usecase"
 	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
 )
+
+// Migrations holds the SQL files this platform owns. Consumers compose them
+// via migrator.Run alongside their own modules' migrations.
+//
+//go:embed migrations/*.sql
+var Migrations embed.FS
 
 // LogEventParams re-exports the parameters used by EventLogger.Execute so
 // consumers only need to import this package.

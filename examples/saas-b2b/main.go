@@ -59,7 +59,12 @@ func main() {
 	}
 	slog.Info("Successfully connected to database")
 
-	if err := migrator.Run(cfg.DatabaseURL, "file://migrations"); err != nil {
+	if err := migrator.Run(cfg.DatabaseURL, []migrator.Source{
+		{Name: "tenant", FS: tenant.Migrations, Path: "migrations"},
+		{Name: "auth", FS: auth.Migrations, Path: "migrations"},
+		{Name: "membership", FS: membership.Migrations, Path: "migrations"},
+		{Name: "audit", FS: audit.Migrations, Path: "migrations"},
+	}); err != nil {
 		slog.Error("Failed to run database migrations", "error", err)
 		os.Exit(1)
 	}
