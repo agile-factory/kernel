@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/platform/audit"
 	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
 	authdomain "github.com/AgileFactory/kernel/platform/auth/domain"
 	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
 	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
@@ -23,7 +23,7 @@ type RegisterUseCase struct {
 	hasher         PasswordHasher
 	tenantRepo     tenantdomain.TenantRepository
 	membershipRepo memberdomain.MembershipRepository
-	audit          *auditusecase.LogEventUseCase
+	auditLogger    audit.EventLogger
 }
 
 // NewRegisterUseCase creates a new RegisterUseCase.
@@ -32,14 +32,14 @@ func NewRegisterUseCase(
 	hasher PasswordHasher,
 	tenantRepo tenantdomain.TenantRepository,
 	membershipRepo memberdomain.MembershipRepository,
-	audit *auditusecase.LogEventUseCase,
+	auditLogger audit.EventLogger,
 ) *RegisterUseCase {
 	return &RegisterUseCase{
 		repo:           repo,
 		hasher:         hasher,
 		tenantRepo:     tenantRepo,
 		membershipRepo: membershipRepo,
-		audit:          audit,
+		auditLogger:    auditLogger,
 	}
 }
 
@@ -96,7 +96,7 @@ func (uc *RegisterUseCase) Execute(ctx context.Context, id, tenantID, emailStr, 
 		return nil, errors.WrapInternal(err)
 	}
 
-	uc.audit.Execute(ctx, auditusecase.LogEventParams{
+	uc.auditLogger.Execute(ctx, audit.LogEventParams{
 		TenantID:   tenant.ID,
 		ActorID:    user.ID,
 		Action:     auditdomain.ACTION_USER_REGISTERED,

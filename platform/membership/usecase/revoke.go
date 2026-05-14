@@ -4,22 +4,22 @@ import (
 	"context"
 
 	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/platform/audit"
 	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
 	"github.com/AgileFactory/kernel/platform/membership/domain"
 )
 
 // RevokeMemberUseCase transitions a membership to REVOKED.
 type RevokeMemberUseCase struct {
-	repo  domain.MembershipRepository
-	audit *auditusecase.LogEventUseCase
+	repo        domain.MembershipRepository
+	auditLogger audit.EventLogger
 }
 
 // NewRevokeMemberUseCase creates a new RevokeMemberUseCase.
-func NewRevokeMemberUseCase(repo domain.MembershipRepository, audit *auditusecase.LogEventUseCase) *RevokeMemberUseCase {
+func NewRevokeMemberUseCase(repo domain.MembershipRepository, auditLogger audit.EventLogger) *RevokeMemberUseCase {
 	return &RevokeMemberUseCase{
-		repo:  repo,
-		audit: audit,
+		repo:        repo,
+		auditLogger: auditLogger,
 	}
 }
 
@@ -58,7 +58,7 @@ func (uc *RevokeMemberUseCase) Execute(ctx context.Context, membershipID, revoke
 		return nil, errors.WrapInternal(err)
 	}
 
-	uc.audit.Execute(ctx, auditusecase.LogEventParams{
+	uc.auditLogger.Execute(ctx, audit.LogEventParams{
 		TenantID:   membership.TenantID,
 		ActorID:    revokerID,
 		Action:     auditdomain.ACTION_MEMBER_REVOKED,

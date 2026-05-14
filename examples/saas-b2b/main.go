@@ -1,33 +1,45 @@
+// saas-b2b is the minimal example showing how to consume the kernel platform
+// packages from a consumer SaaS repo. It composes the audit, tenant,
+// membership and auth modules explicitly — no global state, no init().
+//
+// Real consumer repos would mirror this `main.go`, adding their own business
+// modules alongside the kernel modules.
 package main
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/AgileFactory/kernel/bootstrap"
+	deliveryhttp "github.com/AgileFactory/kernel/delivery/http"
 	"github.com/AgileFactory/kernel/kernel/config"
 	"github.com/AgileFactory/kernel/kernel/logger"
 	"github.com/AgileFactory/kernel/kernel/migrator"
 	"github.com/AgileFactory/kernel/kernel/server"
+	"github.com/AgileFactory/kernel/platform/audit"
+	auditinfra "github.com/AgileFactory/kernel/platform/audit/infrastructure"
+	"github.com/AgileFactory/kernel/platform/auth"
+	authinfra "github.com/AgileFactory/kernel/platform/auth/infrastructure"
+	"github.com/AgileFactory/kernel/platform/membership"
+	memberinfra "github.com/AgileFactory/kernel/platform/membership/infrastructure"
+	"github.com/AgileFactory/kernel/platform/tenant"
+	tenantinfra "github.com/AgileFactory/kernel/platform/tenant/infrastructure"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-	// Initialize configuration
 	cfg := config.Load()
 
-	// Initialize structured logger
 	log, closeLog, err := logger.New(logger.Config{
 		Level:       cfg.LogLevel,
 		Environment: cfg.Environment,
 		Dir:         cfg.LogDir,
 	})
 	if err != nil {
-		// Fallback to simple stdout logger if we can't open log files
 		log = logger.NewSimple(cfg.LogLevel, cfg.Environment)
 		log.Error("Failed to initialize file logger, falling back to stdout", "error", err)
 	} else {
@@ -36,7 +48,7 @@ func main() {
 	slog.SetDefault(log)
 
 	slog.Info("Starting application", "env", cfg.Environment, "port", cfg.Port)
-	// initialize db
+
 	db, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		panic(err)
@@ -47,21 +59,66 @@ func main() {
 	}
 	slog.Info("Successfully connected to database")
 
-	// Run database migrations
 	if err := migrator.Run(cfg.DatabaseURL, "file://migrations"); err != nil {
 		slog.Error("Failed to run database migrations", "error", err)
 		os.Exit(1)
 	}
 
-	// Initialize dependency injection container
-	container := bootstrap.NewContainer(cfg, log, db)
+	// ── Repositories ─────────────────────────────────────────────────────────
+	// Repos live outside the modules so platforms can share a single repo
+	// instance (e.g. audit's HTTP handler needs the membership repo for
+	// perm checks while membership's use cases need audit.EventLogger —
+	// constructing repos here breaks that cycle cleanly).
+	auditRepo := auditinfra.NewPostgresAuditRepository(db)
+	tenantRepo := tenantinfra.NewPostgresTenantRepository(db)
+	memberRepo := memberinfra.NewPostgresMembershipRepository(db)
+	userRepo := authinfra.NewPostgresUserRepository(db)
 
+	// ── Modules ──────────────────────────────────────────────────────────────
+	auditMod := audit.New(audit.Config{
+		Repo:           auditRepo,
+		MembershipRepo: memberRepo,
+		Logger:         log,
+	})
 
+	tenantMod := tenant.New(tenant.Config{
+		Repo:        tenantRepo,
+		AuditLogger: auditMod.EventLogger(),
+		Logger:      log,
+	})
 
-	// Initialize HTTP server
-	srv := server.New(cfg, container.Router())
+	memberMod := membership.New(membership.Config{
+		Repo:        memberRepo,
+		TenantRepo:  tenantRepo,
+		AuditLogger: auditMod.EventLogger(),
+		Logger:      log,
+	})
 
-	// Start server in a goroutine
+	authMod := auth.New(auth.Config{
+		UserRepo:         userRepo,
+		TenantRepo:       tenantRepo,
+		MembershipRepo:   memberRepo,
+		MembershipListUC: memberMod.ListUC,
+		AuditLogger:      auditMod.EventLogger(),
+		Logger:           log,
+		JWTSecret:        cfg.JWTSecret,
+		TokenLifespan:    cfg.TokenLifespan,
+	})
+
+	// ── HTTP wiring ──────────────────────────────────────────────────────────
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+	})
+
+	auditMod.RegisterRoutes(mux)
+	tenantMod.RegisterRoutes(mux)
+	memberMod.RegisterRoutes(mux)
+	authMod.RegisterRoutes(mux)
+
+	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(mux, log))
+
 	go func() {
 		if err := srv.Start(); err != nil {
 			slog.Error("Server failed to start", "error", err)
@@ -69,15 +126,11 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	slog.Info("Shutting down server...")
-
-	// The context is used to inform the server it has 5 seconds to finish
-	// the request it is currently handling
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 
@@ -85,6 +138,5 @@ func main() {
 		slog.Error("Server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
-
 	slog.Info("Server exiting")
 }

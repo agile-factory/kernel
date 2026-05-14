@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/platform/audit"
 	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
 	"github.com/AgileFactory/kernel/platform/auth/domain"
 )
 
@@ -21,19 +21,19 @@ type TokenGenerator interface {
 
 // LoginUseCase coordinates user authentication and token generation.
 type LoginUseCase struct {
-	repo       domain.UserRepository
-	verifier   PasswordVerifier
-	jwtService TokenGenerator
-	audit      *auditusecase.LogEventUseCase
+	repo        domain.UserRepository
+	verifier    PasswordVerifier
+	jwtService  TokenGenerator
+	auditLogger audit.EventLogger
 }
 
 // NewLoginUseCase creates a new LoginUseCase.
-func NewLoginUseCase(repo domain.UserRepository, verifier PasswordVerifier, jwt TokenGenerator, audit *auditusecase.LogEventUseCase) *LoginUseCase {
+func NewLoginUseCase(repo domain.UserRepository, verifier PasswordVerifier, jwt TokenGenerator, auditLogger audit.EventLogger) *LoginUseCase {
 	return &LoginUseCase{
-		repo:       repo,
-		verifier:   verifier,
-		jwtService: jwt,
-		audit:      audit,
+		repo:        repo,
+		verifier:    verifier,
+		jwtService:  jwt,
+		auditLogger: auditLogger,
 	}
 }
 
@@ -63,7 +63,7 @@ func (uc *LoginUseCase) Execute(ctx context.Context, emailStr, password string) 
 		return "", nil, errors.WrapInternal(err)
 	}
 
-	uc.audit.Execute(ctx, auditusecase.LogEventParams{
+	uc.auditLogger.Execute(ctx, audit.LogEventParams{
 		TenantID:   "", // Login is not tenant-scoped right now
 		ActorID:    user.ID,
 		Action:     auditdomain.ACTION_USER_LOGGED_IN,

@@ -5,8 +5,8 @@ import (
 	stderrors "errors"
 
 	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/platform/audit"
 	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
 	"github.com/AgileFactory/kernel/platform/membership/domain"
 	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
 	"github.com/google/uuid"
@@ -14,17 +14,17 @@ import (
 
 // InviteMemberUseCase coordinates the invitation of a new member to a tenant.
 type InviteMemberUseCase struct {
-	repo       domain.MembershipRepository
-	tenantRepo tenantdomain.TenantRepository
-	audit      *auditusecase.LogEventUseCase
+	repo        domain.MembershipRepository
+	tenantRepo  tenantdomain.TenantRepository
+	auditLogger audit.EventLogger
 }
 
 // NewInviteMemberUseCase creates a new InviteMemberUseCase.
-func NewInviteMemberUseCase(repo domain.MembershipRepository, tenantRepo tenantdomain.TenantRepository, audit *auditusecase.LogEventUseCase) *InviteMemberUseCase {
+func NewInviteMemberUseCase(repo domain.MembershipRepository, tenantRepo tenantdomain.TenantRepository, auditLogger audit.EventLogger) *InviteMemberUseCase {
 	return &InviteMemberUseCase{
-		repo:       repo,
-		tenantRepo: tenantRepo,
-		audit:      audit,
+		repo:        repo,
+		tenantRepo:  tenantRepo,
+		auditLogger: auditLogger,
 	}
 }
 
@@ -86,7 +86,7 @@ func (uc *InviteMemberUseCase) Execute(ctx context.Context, inviterID, tenantID,
 		return nil, errors.WrapInternal(err)
 	}
 
-	uc.audit.Execute(ctx, auditusecase.LogEventParams{
+	uc.auditLogger.Execute(ctx, audit.LogEventParams{
 		TenantID:   tenantID,
 		ActorID:    inviterID,
 		Action:     auditdomain.ACTION_MEMBER_INVITED,

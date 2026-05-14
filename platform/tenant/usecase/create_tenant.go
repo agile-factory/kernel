@@ -4,22 +4,22 @@ import (
 	"context"
 
 	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/AgileFactory/kernel/platform/audit"
 	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
 	"github.com/AgileFactory/kernel/platform/tenant/domain"
 )
 
 // CreateTenantUseCase handles the creation of a new tenant.
 type CreateTenantUseCase struct {
-	repo  domain.TenantRepository
-	audit *auditusecase.LogEventUseCase
+	repo        domain.TenantRepository
+	auditLogger audit.EventLogger
 }
 
 // NewCreateTenantUseCase creates a new CreateTenantUseCase.
-func NewCreateTenantUseCase(repo domain.TenantRepository, audit *auditusecase.LogEventUseCase) *CreateTenantUseCase {
+func NewCreateTenantUseCase(repo domain.TenantRepository, auditLogger audit.EventLogger) *CreateTenantUseCase {
 	return &CreateTenantUseCase{
-		repo:  repo,
-		audit: audit,
+		repo:        repo,
+		auditLogger: auditLogger,
 	}
 }
 
@@ -52,7 +52,7 @@ func (uc *CreateTenantUseCase) Execute(ctx context.Context, id, name, slug strin
 		return nil, errors.WrapInternal(err)
 	}
 
-	uc.audit.Execute(ctx, auditusecase.LogEventParams{
+	uc.auditLogger.Execute(ctx, audit.LogEventParams{
 		TenantID:   tenant.ID,
 		ActorID:    "", // no actor in this standalone context
 		Action:     auditdomain.ACTION_TENANT_CREATED,
