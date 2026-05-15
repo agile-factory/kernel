@@ -6,21 +6,21 @@ import (
 	"testing"
 	"time"
 
+	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
+	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
 	authdomain "github.com/AgileFactory/kernel/platform/auth/domain"
 	"github.com/AgileFactory/kernel/platform/auth/usecase"
-	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
-	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
-	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
-	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
 )
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
-// mockUserRepo simule authdomain.UserRepository
+// mockUserRepo simulates authdomain.UserRepository for the in-memory tests
+// below. Test-specific behaviour is plugged in via the *Fn fields.
 type mockUserRepo struct {
-	findByEmailFn func(ctx context.Context, email authdomain.Email) (*authdomain.User, error)
-	findByIDFn    func(ctx context.Context, id string) (*authdomain.User, error)
-	saveFn        func(ctx context.Context, user *authdomain.User) error
+	findByEmailFn        func(ctx context.Context, email authdomain.Email) (*authdomain.User, error)
+	findByIDFn           func(ctx context.Context, id string) (*authdomain.User, error)
+	saveFn               func(ctx context.Context, user *authdomain.User) error
+	updateEmailVerified  func(ctx context.Context, userID string) error
 }
 
 func (m *mockUserRepo) FindByEmail(ctx context.Context, email authdomain.Email) (*authdomain.User, error) {
@@ -44,19 +44,37 @@ func (m *mockUserRepo) Save(ctx context.Context, user *authdomain.User) error {
 	return nil
 }
 
-// mockHasher simule PasswordHasher
-type mockHasher struct {
-	hashFn func(password string) (string, error)
-}
-
-func (m *mockHasher) Hash(password string) (string, error) {
-	if m.hashFn != nil {
-		return m.hashFn(password)
+func (m *mockUserRepo) UpdateEmailVerified(ctx context.Context, userID string) error {
+	if m.updateEmailVerified != nil {
+		return m.updateEmailVerified(ctx, userID)
 	}
-	return "hashed_" + password, nil
+	return nil
 }
 
-// mockVerifier simule PasswordVerifier
+// mockRefreshTokenRepo simulates authdomain.RefreshTokenRepository in memory.
+type mockRefreshTokenRepo struct {
+	saved      []*authdomain.RefreshToken
+	revokedIDs []string
+	findFn     func(ctx context.Context, hash string) (*authdomain.RefreshToken, error)
+}
+
+func (m *mockRefreshTokenRepo) Save(ctx context.Context, t *authdomain.RefreshToken) error {
+	m.saved = append(m.saved, t)
+	return nil
+}
+
+func (m *mockRefreshTokenRepo) FindByHash(ctx context.Context, hash string) (*authdomain.RefreshToken, error) {
+	if m.findFn != nil {
+		return m.findFn(ctx, hash)
+	}
+	return nil, authdomain.ErrTokenNotFound
+}
+
+func (m *mockRefreshTokenRepo) Revoke(ctx context.Context, id string) error {
+	m.revokedIDs = append(m.revokedIDs, id)
+	return nil
+}
+
 type mockVerifier struct {
 	verifyFn func(hashed, plain string) error
 }
@@ -65,14 +83,12 @@ func (m *mockVerifier) Verify(hashed, plain string) error {
 	if m.verifyFn != nil {
 		return m.verifyFn(hashed, plain)
 	}
-	// Par défaut : OK si hashed == "hashed_"+plain
 	if hashed == "hashed_"+plain {
 		return nil
 	}
 	return errors.New("invalid password")
 }
 
-// mockTokenGenerator simule TokenGenerator
 type mockTokenGenerator struct {
 	generateFn func(user *authdomain.User) (string, error)
 }
@@ -84,66 +100,12 @@ func (m *mockTokenGenerator) GenerateToken(user *authdomain.User) (string, error
 	return "jwt_token_for_" + user.ID, nil
 }
 
-// mockTokenValidator simule TokenValidator
-type mockTokenValidator struct {
-	validateFn func(token string) (string, error)
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+func newAuditUseCase() *auditusecase.LogEventUseCase {
+	return auditusecase.NewLogEventUseCase(&mockAuditRepo{})
 }
 
-func (m *mockTokenValidator) ValidateToken(token string) (string, error) {
-	if m.validateFn != nil {
-		return m.validateFn(token)
-	}
-	return "user-001", nil
-}
-
-// mockTenantRepo simule tenantdomain.TenantRepository
-type mockTenantRepo struct {
-	findByIDFn func(ctx context.Context, id string) (*tenantdomain.Tenant, error)
-}
-
-func (m *mockTenantRepo) FindByID(ctx context.Context, id string) (*tenantdomain.Tenant, error) {
-	if m.findByIDFn != nil {
-		return m.findByIDFn(ctx, id)
-	}
-	return &tenantdomain.Tenant{ID: id, IsActive: true}, nil
-}
-
-func (m *mockTenantRepo) Save(ctx context.Context, t *tenantdomain.Tenant) error { return nil }
-func (m *mockTenantRepo) FindBySlug(ctx context.Context, slug string) (*tenantdomain.Tenant, error) {
-	return nil, tenantdomain.ErrTenantNotFound
-}
-func (m *mockTenantRepo) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
-	return false, nil
-}
-
-// mockMembershipRepo simule memberdomain.MembershipRepository
-type mockMembershipRepo struct {
-	saveFn func(ctx context.Context, m *memberdomain.Membership) error
-}
-
-func (m *mockMembershipRepo) Save(ctx context.Context, mem *memberdomain.Membership) error {
-	if m.saveFn != nil {
-		return m.saveFn(ctx, mem)
-	}
-	return nil
-}
-func (m *mockMembershipRepo) FindByID(ctx context.Context, id string) (*memberdomain.Membership, error) {
-	return nil, memberdomain.ErrMembershipNotFound
-}
-func (m *mockMembershipRepo) FindByUserAndTenant(ctx context.Context, userID, tenantID string) (*memberdomain.Membership, error) {
-	return nil, memberdomain.ErrMembershipNotFound
-}
-func (m *mockMembershipRepo) ListByTenant(ctx context.Context, tenantID string) ([]*memberdomain.Membership, error) {
-	return nil, nil
-}
-func (m *mockMembershipRepo) ListByUser(ctx context.Context, userID string) ([]*memberdomain.Membership, error) {
-	return nil, nil
-}
-func (m *mockMembershipRepo) UpdateStatus(ctx context.Context, id string, status memberdomain.MemberStatus, joinedAt *time.Time) error {
-	return nil
-}
-
-// mockAuditRepo simule auditdomain.AuditRepository (no-op pour les tests unitaires)
 type mockAuditRepo struct{}
 
 func (m *mockAuditRepo) Save(ctx context.Context, log *auditdomain.AuditLog) error { return nil }
@@ -160,295 +122,159 @@ func (m *mockAuditRepo) ListAllCursor(ctx context.Context, limit int, after *aud
 	return nil, nil
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-func newAuditUseCase() *auditusecase.LogEventUseCase {
-	return auditusecase.NewLogEventUseCase(&mockAuditRepo{})
+func newLoginUC(repo *mockUserRepo, refresh *mockRefreshTokenRepo, verifier *mockVerifier, gen *mockTokenGenerator) *usecase.LoginUseCase {
+	return usecase.NewLoginUseCase(repo, refresh, verifier, gen, newAuditUseCase(), 30*24*time.Hour)
 }
 
-func newRegisterUC(
-	repo *mockUserRepo,
-	hasher *mockHasher,
-	tenantRepo *mockTenantRepo,
-	memberRepo *mockMembershipRepo,
-) *usecase.RegisterUseCase {
-	return usecase.NewRegisterUseCase(repo, hasher, tenantRepo, memberRepo, newAuditUseCase())
-}
-
-func newLoginUC(repo *mockUserRepo, verifier *mockVerifier, gen *mockTokenGenerator) *usecase.LoginUseCase {
-	return usecase.NewLoginUseCase(repo, verifier, gen, newAuditUseCase())
-}
-
-// ─── RegisterUseCase ─────────────────────────────────────────────────────────
-
-func TestRegister_Success(t *testing.T) {
-	repo := &mockUserRepo{}
-	uc := newRegisterUC(repo, &mockHasher{}, &mockTenantRepo{}, &mockMembershipRepo{})
-
-	user, err := uc.Execute(context.Background(),
-		"user-001", "tenant-001", "alice@agile.io", "Password123!", memberdomain.MEMBER_ROLE_OWNER,
-	)
+func activeUser(t *testing.T, id, emailStr string) *authdomain.User {
+	t.Helper()
+	email, err := authdomain.NewEmail(emailStr)
 	if err != nil {
-		t.Fatalf("Execute() unexpected error: %v", err)
+		t.Fatalf("activeUser: invalid email: %v", err)
 	}
-	if user == nil {
-		t.Fatal("Execute() returned nil user on success")
-	}
-	if user.ID != "user-001" {
-		t.Errorf("user.ID: got %q, want %q", user.ID, "user-001")
-	}
-}
-
-func TestRegister_InvalidEmail(t *testing.T) {
-	uc := newRegisterUC(&mockUserRepo{}, &mockHasher{}, &mockTenantRepo{}, &mockMembershipRepo{})
-
-	_, err := uc.Execute(context.Background(),
-		"user-002", "tenant-001", "not-an-email", "Password123!", memberdomain.MEMBER_ROLE_OWNER,
-	)
-	if err == nil {
-		t.Fatal("Execute() should return error for invalid email")
-	}
-	if err != authdomain.ErrInvalidEmail {
-		t.Errorf("expected ErrInvalidEmail, got %v", err)
-	}
-}
-
-func TestRegister_TenantNotFound(t *testing.T) {
-	tenantRepo := &mockTenantRepo{
-		findByIDFn: func(ctx context.Context, id string) (*tenantdomain.Tenant, error) {
-			return nil, tenantdomain.ErrTenantNotFound
-		},
-	}
-	uc := newRegisterUC(&mockUserRepo{}, &mockHasher{}, tenantRepo, &mockMembershipRepo{})
-
-	_, err := uc.Execute(context.Background(),
-		"user-003", "ghost-tenant", "bob@agile.io", "Password123!", memberdomain.MEMBER_ROLE_OWNER,
-	)
-	if err == nil {
-		t.Fatal("Execute() should fail when tenant is not found")
-	}
-}
-
-func TestRegister_TenantInactive(t *testing.T) {
-	tenantRepo := &mockTenantRepo{
-		findByIDFn: func(ctx context.Context, id string) (*tenantdomain.Tenant, error) {
-			return &tenantdomain.Tenant{ID: id, IsActive: false}, nil
-		},
-	}
-	uc := newRegisterUC(&mockUserRepo{}, &mockHasher{}, tenantRepo, &mockMembershipRepo{})
-
-	_, err := uc.Execute(context.Background(),
-		"user-004", "inactive-tenant", "carol@agile.io", "Password123!", memberdomain.MEMBER_ROLE_OWNER,
-	)
-	if err == nil {
-		t.Fatal("Execute() should fail for inactive tenant")
-	}
-}
-
-func TestRegister_EmailAlreadyTaken(t *testing.T) {
-	existingUser := authdomain.NewUser("existing-001", authdomain.Email{Value: "taken@agile.io"}, "hash", authdomain.ROLE_VIEWER)
-	repo := &mockUserRepo{
-		findByEmailFn: func(ctx context.Context, email authdomain.Email) (*authdomain.User, error) {
-			return existingUser, nil
-		},
-	}
-	uc := newRegisterUC(repo, &mockHasher{}, &mockTenantRepo{}, &mockMembershipRepo{})
-
-	_, err := uc.Execute(context.Background(),
-		"user-005", "tenant-001", "taken@agile.io", "Password123!", memberdomain.MEMBER_ROLE_OWNER,
-	)
-	if err != authdomain.ErrUserAlreadyExists {
-		t.Errorf("expected ErrUserAlreadyExists, got %v", err)
-	}
-}
-
-func TestRegister_HasherError(t *testing.T) {
-	hasher := &mockHasher{
-		hashFn: func(password string) (string, error) {
-			return "", errors.New("bcrypt: internal error")
-		},
-	}
-	uc := newRegisterUC(&mockUserRepo{}, hasher, &mockTenantRepo{}, &mockMembershipRepo{})
-
-	_, err := uc.Execute(context.Background(),
-		"user-006", "tenant-001", "dave@agile.io", "Password123!", memberdomain.MEMBER_ROLE_OWNER,
-	)
-	if err == nil {
-		t.Fatal("Execute() should propagate hasher error")
-	}
-}
-
-func TestRegister_RepoSaveError(t *testing.T) {
-	repo := &mockUserRepo{
-		saveFn: func(ctx context.Context, user *authdomain.User) error {
-			return errors.New("db: connection lost")
-		},
-	}
-	uc := newRegisterUC(repo, &mockHasher{}, &mockTenantRepo{}, &mockMembershipRepo{})
-
-	_, err := uc.Execute(context.Background(),
-		"user-007", "tenant-001", "eve@agile.io", "Password123!", memberdomain.MEMBER_ROLE_OWNER,
-	)
-	if err == nil {
-		t.Fatal("Execute() should propagate repo save error")
-	}
-}
-
-func TestRegister_MembershipSaveError(t *testing.T) {
-	memberRepo := &mockMembershipRepo{
-		saveFn: func(ctx context.Context, m *memberdomain.Membership) error {
-			return errors.New("db: membership save failed")
-		},
-	}
-	uc := newRegisterUC(&mockUserRepo{}, &mockHasher{}, &mockTenantRepo{}, memberRepo)
-
-	_, err := uc.Execute(context.Background(),
-		"user-008", "tenant-001", "frank@agile.io", "Password123!", memberdomain.MEMBER_ROLE_OWNER,
-	)
-	if err == nil {
-		t.Fatal("Execute() should propagate membership save error")
-	}
+	u := authdomain.NewUser(id, email, "hashed_Password123!", authdomain.ROLE_VIEWER)
+	u.MarkEmailVerified()
+	return u
 }
 
 // ─── LoginUseCase ────────────────────────────────────────────────────────────
 
-func TestLogin_Success(t *testing.T) {
-	email, _ := authdomain.NewEmail("alice@agile.io")
-	storedUser := authdomain.NewUser("user-001", email, "hashed_Password123!", authdomain.ROLE_VIEWER)
-
-	repo := &mockUserRepo{
-		findByEmailFn: func(ctx context.Context, e authdomain.Email) (*authdomain.User, error) {
-			return storedUser, nil
-		},
+func TestLogin_Success_IssuesAccessAndRefresh(t *testing.T) {
+	user := activeUser(t, "user-001", "alice@agile.io")
+	users := &mockUserRepo{
+		findByEmailFn: func(ctx context.Context, e authdomain.Email) (*authdomain.User, error) { return user, nil },
 	}
-	uc := newLoginUC(repo, &mockVerifier{}, &mockTokenGenerator{})
+	refresh := &mockRefreshTokenRepo{}
 
-	token, user, err := uc.Execute(context.Background(), "alice@agile.io", "Password123!")
+	uc := newLoginUC(users, refresh, &mockVerifier{}, &mockTokenGenerator{})
+
+	out, err := uc.Execute(context.Background(), "alice@agile.io", "Password123!")
 	if err != nil {
 		t.Fatalf("Execute() unexpected error: %v", err)
 	}
-	if token == "" {
-		t.Error("Execute() should return a non-empty token")
+	if out.AccessToken == "" {
+		t.Error("expected non-empty access token")
 	}
-	if user == nil || user.ID != "user-001" {
-		t.Errorf("Execute() returned unexpected user: %+v", user)
+	if out.RefreshToken == "" {
+		t.Error("expected non-empty refresh token")
+	}
+	if len(refresh.saved) != 1 {
+		t.Errorf("expected exactly one refresh token persisted, got %d", len(refresh.saved))
 	}
 }
 
-func TestLogin_InvalidEmailFormat(t *testing.T) {
-	uc := newLoginUC(&mockUserRepo{}, &mockVerifier{}, &mockTokenGenerator{})
-
-	_, _, err := uc.Execute(context.Background(), "not-an-email", "Password123!")
+func TestLogin_InvalidEmailFormat_HidesAsInvalidCredentials(t *testing.T) {
+	uc := newLoginUC(&mockUserRepo{}, &mockRefreshTokenRepo{}, &mockVerifier{}, &mockTokenGenerator{})
+	_, err := uc.Execute(context.Background(), "not-an-email", "Password123!")
 	if err != authdomain.ErrInvalidCredentials {
 		t.Errorf("expected ErrInvalidCredentials for bad email, got %v", err)
 	}
 }
 
-func TestLogin_UserNotFound(t *testing.T) {
-	repo := &mockUserRepo{
-		findByEmailFn: func(ctx context.Context, email authdomain.Email) (*authdomain.User, error) {
+func TestLogin_UserNotFound_HidesAsInvalidCredentials(t *testing.T) {
+	users := &mockUserRepo{
+		findByEmailFn: func(ctx context.Context, e authdomain.Email) (*authdomain.User, error) {
 			return nil, authdomain.ErrUserNotFound
 		},
 	}
-	uc := newLoginUC(repo, &mockVerifier{}, &mockTokenGenerator{})
-
-	_, _, err := uc.Execute(context.Background(), "ghost@agile.io", "Password123!")
-	// Doit retourner ErrInvalidCredentials (pas ErrUserNotFound — anti-enumeration)
+	uc := newLoginUC(users, &mockRefreshTokenRepo{}, &mockVerifier{}, &mockTokenGenerator{})
+	_, err := uc.Execute(context.Background(), "ghost@agile.io", "Password123!")
 	if err != authdomain.ErrInvalidCredentials {
 		t.Errorf("expected ErrInvalidCredentials (anti-enumeration), got %v", err)
 	}
 }
 
 func TestLogin_WrongPassword(t *testing.T) {
-	email, _ := authdomain.NewEmail("alice@agile.io")
-	storedUser := authdomain.NewUser("user-001", email, "hashed_correct_pass", authdomain.ROLE_VIEWER)
-
-	repo := &mockUserRepo{
-		findByEmailFn: func(ctx context.Context, e authdomain.Email) (*authdomain.User, error) {
-			return storedUser, nil
-		},
+	user := activeUser(t, "user-001", "alice@agile.io")
+	users := &mockUserRepo{
+		findByEmailFn: func(ctx context.Context, e authdomain.Email) (*authdomain.User, error) { return user, nil },
 	}
 	verifier := &mockVerifier{
-		verifyFn: func(hashed, plain string) error {
-			return errors.New("password mismatch")
-		},
+		verifyFn: func(hashed, plain string) error { return errors.New("password mismatch") },
 	}
-	uc := newLoginUC(repo, verifier, &mockTokenGenerator{})
+	uc := newLoginUC(users, &mockRefreshTokenRepo{}, verifier, &mockTokenGenerator{})
 
-	_, _, err := uc.Execute(context.Background(), "alice@agile.io", "wrong_password")
+	_, err := uc.Execute(context.Background(), "alice@agile.io", "wrong_password")
 	if err != authdomain.ErrInvalidCredentials {
-		t.Errorf("expected ErrInvalidCredentials on wrong password, got %v", err)
+		t.Errorf("expected ErrInvalidCredentials, got %v", err)
 	}
 }
 
-func TestLogin_TokenGenerationError(t *testing.T) {
+func TestLogin_PendingEmail_BlocksWithUserNotActive(t *testing.T) {
 	email, _ := authdomain.NewEmail("alice@agile.io")
-	storedUser := authdomain.NewUser("user-001", email, "hashed_Password123!", authdomain.ROLE_VIEWER)
+	// Fresh user — still in PENDING_EMAIL.
+	user := authdomain.NewUser("user-001", email, "hashed_Password123!", authdomain.ROLE_VIEWER)
+	users := &mockUserRepo{
+		findByEmailFn: func(ctx context.Context, e authdomain.Email) (*authdomain.User, error) { return user, nil },
+	}
+	uc := newLoginUC(users, &mockRefreshTokenRepo{}, &mockVerifier{}, &mockTokenGenerator{})
 
-	repo := &mockUserRepo{
-		findByEmailFn: func(ctx context.Context, e authdomain.Email) (*authdomain.User, error) {
-			return storedUser, nil
-		},
+	_, err := uc.Execute(context.Background(), "alice@agile.io", "Password123!")
+	if err != authdomain.ErrUserNotActive {
+		t.Errorf("expected ErrUserNotActive, got %v", err)
+	}
+}
+
+func TestLogin_TokenGenerationError_WrapsInternal(t *testing.T) {
+	user := activeUser(t, "user-001", "alice@agile.io")
+	users := &mockUserRepo{
+		findByEmailFn: func(ctx context.Context, e authdomain.Email) (*authdomain.User, error) { return user, nil },
 	}
 	gen := &mockTokenGenerator{
 		generateFn: func(user *authdomain.User) (string, error) {
 			return "", errors.New("jwt: signing key unavailable")
 		},
 	}
-	uc := newLoginUC(repo, &mockVerifier{}, gen)
+	uc := newLoginUC(users, &mockRefreshTokenRepo{}, &mockVerifier{}, gen)
 
-	_, _, err := uc.Execute(context.Background(), "alice@agile.io", "Password123!")
+	_, err := uc.Execute(context.Background(), "alice@agile.io", "Password123!")
 	if err == nil {
 		t.Fatal("Execute() should propagate token generation error")
 	}
 }
 
-// ─── RefreshUseCase ──────────────────────────────────────────────────────────
+// ─── LogoutUseCase ───────────────────────────────────────────────────────────
 
-func TestRefresh_Success(t *testing.T) {
-	email, _ := authdomain.NewEmail("alice@agile.io")
-	storedUser := authdomain.NewUser("user-001", email, "hashed_pass", authdomain.ROLE_VIEWER)
-
-	repo := &mockUserRepo{
-		findByIDFn: func(ctx context.Context, id string) (*authdomain.User, error) {
-			return storedUser, nil
+func TestLogout_RevokesPresentedToken(t *testing.T) {
+	stored := &authdomain.RefreshToken{
+		ID:        "rt-001",
+		UserID:    "user-001",
+		TokenHash: authdomain.HashRefreshToken("raw-token-abc"),
+	}
+	refresh := &mockRefreshTokenRepo{
+		findFn: func(ctx context.Context, hash string) (*authdomain.RefreshToken, error) {
+			if hash == stored.TokenHash {
+				return stored, nil
+			}
+			return nil, authdomain.ErrTokenNotFound
 		},
 	}
-	uc := usecase.NewRefreshUseCase(repo, &mockTokenValidator{}, &mockTokenGenerator{})
+	uc := usecase.NewLogoutUseCase(refresh)
 
-	newToken, err := uc.Execute(context.Background(), "old_valid_token")
-	if err != nil {
-		t.Fatalf("Execute() unexpected error: %v", err)
+	if err := uc.Execute(context.Background(), "raw-token-abc"); err != nil {
+		t.Fatalf("Logout: unexpected error: %v", err)
 	}
-	if newToken == "" {
-		t.Error("Execute() should return a non-empty new token")
+	if len(refresh.revokedIDs) != 1 || refresh.revokedIDs[0] != "rt-001" {
+		t.Errorf("expected exactly one revocation of rt-001, got %v", refresh.revokedIDs)
 	}
 }
 
-func TestRefresh_InvalidToken(t *testing.T) {
-	validator := &mockTokenValidator{
-		validateFn: func(token string) (string, error) {
-			return "", errors.New("jwt: token expired")
-		},
-	}
-	uc := usecase.NewRefreshUseCase(&mockUserRepo{}, validator, &mockTokenGenerator{})
+func TestLogout_UnknownToken_IsIdempotent(t *testing.T) {
+	refresh := &mockRefreshTokenRepo{} // findFn returns ErrTokenNotFound by default
+	uc := usecase.NewLogoutUseCase(refresh)
 
-	_, err := uc.Execute(context.Background(), "expired_token")
-	if err == nil {
-		t.Fatal("Execute() should fail on invalid token")
+	if err := uc.Execute(context.Background(), "unknown-token"); err != nil {
+		t.Errorf("Logout on unknown token should be a no-op, got %v", err)
+	}
+	if len(refresh.revokedIDs) != 0 {
+		t.Errorf("expected no revocation, got %v", refresh.revokedIDs)
 	}
 }
 
-func TestRefresh_UserDisappeared(t *testing.T) {
-	repo := &mockUserRepo{
-		findByIDFn: func(ctx context.Context, id string) (*authdomain.User, error) {
-			return nil, authdomain.ErrUserNotFound
-		},
-	}
-	uc := usecase.NewRefreshUseCase(repo, &mockTokenValidator{}, &mockTokenGenerator{})
-
-	_, err := uc.Execute(context.Background(), "valid_token_for_deleted_user")
-	if err != authdomain.ErrUserNotFound {
-		t.Errorf("expected ErrUserNotFound, got %v", err)
+func TestLogout_EmptyToken_IsNoOp(t *testing.T) {
+	refresh := &mockRefreshTokenRepo{}
+	uc := usecase.NewLogoutUseCase(refresh)
+	if err := uc.Execute(context.Background(), ""); err != nil {
+		t.Errorf("Logout on empty token should be a no-op, got %v", err)
 	}
 }

@@ -1,7 +1,8 @@
 // Package membership is the membership-lifecycle platform. It exposes a
-// self-contained Module that wires the membership repository, use cases and
-// HTTP handlers. Consumers depend on the Repository interface (defined in
-// platform/membership/domain) for cross-platform lookups.
+// self-contained Module that wires the membership + invite_token repositories,
+// use cases and HTTP handlers. Per RFC-0018 §6, the invite flow now creates
+// an invite_token (consumed by auth.AcceptInvite) rather than a PENDING
+// membership row.
 package membership
 
 import (
@@ -9,11 +10,13 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/AgileFactory/kernel/kernel/events"
 	"github.com/AgileFactory/kernel/platform/audit"
 	memberhttp "github.com/AgileFactory/kernel/platform/membership/delivery/http"
 	"github.com/AgileFactory/kernel/platform/membership/domain"
 	"github.com/AgileFactory/kernel/platform/membership/usecase"
 	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Migrations holds the SQL files this platform owns. Consumers compose them
@@ -25,12 +28,19 @@ var Migrations embed.FS
 // Repository re-exports the membership repository contract for consumers.
 type Repository = domain.MembershipRepository
 
+// InviteTokenRepository re-exports the invite-token repository contract.
+type InviteTokenRepository = domain.InviteTokenRepository
+
 // Config captures the dependencies required by the membership Module.
 type Config struct {
-	Repo        Repository
-	TenantRepo  tenantdomain.TenantRepository
-	AuditLogger audit.EventLogger
-	Logger      *slog.Logger
+	Pool             *pgxpool.Pool
+	Repo             Repository
+	InviteTokenRepo  InviteTokenRepository
+	TenantRepo       tenantdomain.TenantRepository
+	UserLookup       usecase.UserLookup // typically the auth UserRepo, accessed through this slice
+	AuditLogger      audit.EventLogger
+	Publisher        events.Publisher // nil-safe; member.invited event skipped when nil
+	Logger           *slog.Logger
 }
 
 // Module is the self-contained membership platform.
@@ -38,7 +48,6 @@ type Module struct {
 	cfg Config
 
 	InviteUC *usecase.InviteMemberUseCase
-	AcceptUC *usecase.AcceptInviteUseCase
 	RevokeUC *usecase.RevokeMemberUseCase
 	ListUC   *usecase.ListMembersUseCase
 
@@ -47,18 +56,24 @@ type Module struct {
 
 // New wires the membership module's internal components.
 func New(cfg Config) *Module {
-	inviteUC := usecase.NewInviteMemberUseCase(cfg.Repo, cfg.TenantRepo, cfg.AuditLogger)
-	acceptUC := usecase.NewAcceptInviteUseCase(cfg.Repo, cfg.AuditLogger)
+	inviteUC := usecase.NewInviteMemberUseCase(
+		cfg.Pool,
+		cfg.Repo,
+		cfg.TenantRepo,
+		cfg.InviteTokenRepo,
+		cfg.UserLookup,
+		cfg.Publisher,
+		cfg.AuditLogger,
+	)
 	revokeUC := usecase.NewRevokeMemberUseCase(cfg.Repo, cfg.AuditLogger)
 	listUC := usecase.NewListMembersUseCase(cfg.Repo)
 
 	return &Module{
 		cfg:      cfg,
 		InviteUC: inviteUC,
-		AcceptUC: acceptUC,
 		RevokeUC: revokeUC,
 		ListUC:   listUC,
-		handler:  memberhttp.NewMembershipHandler(inviteUC, acceptUC, revokeUC, listUC),
+		handler:  memberhttp.NewMembershipHandler(inviteUC, revokeUC, listUC),
 	}
 }
 

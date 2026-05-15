@@ -54,4 +54,38 @@ const (
 		       updated_at = NOW()
 		WHERE  id = $1
 	`
+
+	queryInsertInviteToken = `
+		INSERT INTO invite_tokens (id, tenant_id, invited_by, email, role, token, expires_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+
+	queryGetInviteTokenByToken = `
+		SELECT id, tenant_id, invited_by, email, role::text, token, expires_at, consumed_at, revoked_at, created_at
+		FROM invite_tokens
+		WHERE token = $1
+	`
+
+	queryGetPendingInviteByTenantAndEmail = `
+		SELECT id, tenant_id, invited_by, email, role::text, token, expires_at, consumed_at, revoked_at, created_at
+		FROM invite_tokens
+		WHERE tenant_id = $1
+		  AND email = $2
+		  AND consumed_at IS NULL
+		  AND revoked_at IS NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	queryConsumeInviteToken = `
+		UPDATE invite_tokens
+		SET consumed_at = NOW()
+		WHERE id = $1 AND consumed_at IS NULL AND revoked_at IS NULL
+	`
+
+	queryRevokeInviteToken = `
+		UPDATE invite_tokens
+		SET revoked_at = NOW()
+		WHERE id = $1 AND consumed_at IS NULL AND revoked_at IS NULL
+	`
 )

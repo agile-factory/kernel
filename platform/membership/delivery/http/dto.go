@@ -10,11 +10,12 @@ import (
 
 // ─── Invite ──────────────────────────────────────────────────────────────────
 
-// InviteRequest is the payload for inviting a user to a tenant.
+// InviteRequest is the payload for inviting a member by email — RFC-0018 §6.
+// The invitee may not yet have a user account; AcceptInvite will create one.
 type InviteRequest struct {
-	TenantID      string `json:"tenantId"`
-	InviteeUserID string `json:"inviteeUserId"`
-	Role          string `json:"role"`
+	TenantID string `json:"tenantId"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
 }
 
 // Validate checks InviteRequest fields.
@@ -22,19 +23,45 @@ func (r *InviteRequest) Validate() error {
 	if strings.TrimSpace(r.TenantID) == "" {
 		return errors.New("tenantId is required")
 	}
-	if strings.TrimSpace(r.InviteeUserID) == "" {
-		return errors.New("inviteeUserId is required")
+	if strings.TrimSpace(r.Email) == "" {
+		return errors.New("email is required")
 	}
 	switch domain.MemberRole(r.Role) {
 	case domain.MEMBER_ROLE_ADMIN, domain.MEMBER_ROLE_AGENT, domain.MEMBER_ROLE_VIEWER:
-		// valid
+		// valid — ROLE_OWNER is intentionally absent (RFC-0018 §6)
 	default:
 		return errors.New("role must be ROLE_ADMIN, ROLE_AGENT, or ROLE_VIEWER")
 	}
 	return nil
 }
 
-// ─── Response ─────────────────────────────────────────────────────────────────
+// InviteResponse echoes the persisted invite plus the raw token. The raw
+// token is intended to be emailed by the notification platform (consumer of
+// `member.invited`); the API returns it so callers can implement custom
+// flows (in-house mailer, copy-to-clipboard for dev, …) without round-trips.
+type InviteResponse struct {
+	ID        string `json:"id"`
+	TenantID  string `json:"tenantId"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expiresAt"`
+	CreatedAt string `json:"createdAt"`
+}
+
+func toInviteResponse(invite *domain.InviteToken, rawToken string) InviteResponse {
+	return InviteResponse{
+		ID:        invite.ID,
+		TenantID:  invite.TenantID,
+		Email:     invite.Email,
+		Role:      string(invite.Role),
+		Token:     rawToken,
+		ExpiresAt: invite.ExpiresAt.Format(time.RFC3339),
+		CreatedAt: invite.CreatedAt.Format(time.RFC3339),
+	}
+}
+
+// ─── Membership listing / revocation ─────────────────────────────────────────
 
 // MembershipResponse is the public representation of a membership.
 type MembershipResponse struct {

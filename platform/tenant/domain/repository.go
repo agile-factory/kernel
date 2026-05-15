@@ -15,4 +15,12 @@ type TenantRepository interface {
 
 	// ExistsBySlug checks if a tenant with the given slug already exists.
 	ExistsBySlug(ctx context.Context, slug string) (bool, error)
+
+	// UpdateName changes the human-readable tenant name; slug is immutable.
+	UpdateName(ctx context.Context, id, name string) error
+
+	// SoftDelete flips is_active to FALSE. The row stays in the table so
+	// references (audit logs, memberships) remain intact. Hard-delete is a
+	// separate GDPR flow (RFC-0027, super-admin only).
+	SoftDelete(ctx context.Context, id string) error
 }

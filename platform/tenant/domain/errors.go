@@ -15,5 +15,10 @@ var (
 
 	// ErrInvalidTenantName is returned when the tenant name is blank.
 	ErrInvalidTenantName = errors.BadRequest("Tenant name must not be empty")
+
+	// ErrTenantSettingsNotFound is returned when no tenant_settings row exists
+	// for a tenant. New tenants get one inserted by the create flow, so this
+	// can only happen for legacy tenants that predate the 0002 migration.
+	ErrTenantSettingsNotFound = errors.NotFound("Tenant settings not found")
 )
 

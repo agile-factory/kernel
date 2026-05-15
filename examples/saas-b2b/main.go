@@ -92,8 +92,12 @@ func main() {
 	// constructing repos here breaks that cycle cleanly).
 	auditRepo := auditinfra.NewPostgresAuditRepository(db)
 	tenantRepo := tenantinfra.NewPostgresTenantRepository(db)
+	tenantSettingsRepo := tenantinfra.NewPostgresTenantSettingsRepository(db)
 	memberRepo := memberinfra.NewPostgresMembershipRepository(db)
 	userRepo := authinfra.NewPostgresUserRepository(db)
+	refreshTokenRepo := authinfra.NewPostgresRefreshTokenRepository(db)
+	emailVerifRepo := authinfra.NewPostgresEmailVerificationTokenRepository(db)
+	inviteTokenRepo := memberinfra.NewPostgresInviteTokenRepository(db)
 
 	// ── Modules ──────────────────────────────────────────────────────────────
 	// The audit Module currently uses best-effort direct injection (ADR-0009
@@ -107,30 +111,41 @@ func main() {
 	})
 
 	tenantMod := tenant.New(tenant.Config{
-		Repo:        tenantRepo,
-		AuditLogger: auditMod.EventLogger(),
-		Logger:      log,
+		Pool:           db,
+		Repo:           tenantRepo,
+		SettingsRepo:   tenantSettingsRepo,
+		MembershipRepo: memberRepo,
+		AuditLogger:    auditMod.EventLogger(),
+		Logger:         log,
 	})
 
 	memberMod := membership.New(membership.Config{
-		Repo:        memberRepo,
-		TenantRepo:  tenantRepo,
-		AuditLogger: auditMod.EventLogger(),
-		Logger:      log,
+		Pool:            db,
+		Repo:            memberRepo,
+		InviteTokenRepo: inviteTokenRepo,
+		TenantRepo:      tenantRepo,
+		UserLookup:      userRepo,
+		AuditLogger:     auditMod.EventLogger(),
+		Publisher:       bus.Publisher(),
+		Logger:          log,
 	})
 
 	authMod := auth.New(auth.Config{
-		UserRepo:         userRepo,
-		TenantRepo:       tenantRepo,
-		MembershipRepo:   memberRepo,
-		MembershipListUC: memberMod.ListUC,
-		AuditLogger:      auditMod.EventLogger(),
-		Logger:           log,
-		JWTSecret:        cfg.JWTSecret,
-		TokenLifespan:    cfg.TokenLifespan,
+		Pool:               db,
+		UserRepo:           userRepo,
+		TenantRepo:         tenantRepo,
+		TenantSettingsRepo: tenantSettingsRepo,
+		MembershipRepo:     memberRepo,
+		InviteTokenRepo:    inviteTokenRepo,
+		RefreshTokenRepo:   refreshTokenRepo,
+		EmailVerifRepo:     emailVerifRepo,
+		MembershipListUC:   memberMod.ListUC,
+		AuditLogger:        auditMod.EventLogger(),
+		Publisher:          bus.Publisher(),
+		Logger:             log,
+		JWTSecret:          cfg.JWTSecret,
+		TokenLifespan:      cfg.TokenLifespan,
 	})
-
-	_ = bus.Publisher() // silence unused until consumers wire it in P1-3
 
 	// ── HTTP wiring ──────────────────────────────────────────────────────────
 	mux := http.NewServeMux()

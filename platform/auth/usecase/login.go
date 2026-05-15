@@ -2,77 +2,122 @@ package usecase
 
 import (
 	"context"
+	"time"
 
 	"github.com/AgileFactory/kernel/kernel/errors"
 	"github.com/AgileFactory/kernel/platform/audit"
 	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
 	"github.com/AgileFactory/kernel/platform/auth/domain"
+	"github.com/google/uuid"
 )
 
-// PasswordVerifier defines how passwords should be verified.
+// PasswordHasher hashes a plaintext password for storage.
+type PasswordHasher interface {
+	Hash(password string) (string, error)
+}
+
+// PasswordVerifier compares a plaintext password against a stored hash.
 type PasswordVerifier interface {
 	Verify(hashedPassword, password string) error
 }
 
-// TokenGenerator defines how JWT tokens are created.
+// TokenGenerator emits a JWT access token bound to a user.
 type TokenGenerator interface {
 	GenerateToken(user *domain.User) (string, error)
 }
 
+// LoginOutput bundles the access + refresh tokens issued at login. The
+// refresh token is NOT tenant-scoped: the caller picks a tenant per-request
+// via the JWT (or a dedicated header / path) once they are signed in.
+type LoginOutput struct {
+	AccessToken  string
+	RefreshToken string
+	User         *domain.User
+}
+
 // LoginUseCase coordinates user authentication and token generation.
 type LoginUseCase struct {
-	repo        domain.UserRepository
-	verifier    PasswordVerifier
-	jwtService  TokenGenerator
-	auditLogger audit.EventLogger
+	users           domain.UserRepository
+	refreshTokens   domain.RefreshTokenRepository
+	verifier        PasswordVerifier
+	jwtService      TokenGenerator
+	auditLogger     audit.EventLogger
+	refreshTokenTTL time.Duration
 }
 
-// NewLoginUseCase creates a new LoginUseCase.
-func NewLoginUseCase(repo domain.UserRepository, verifier PasswordVerifier, jwt TokenGenerator, auditLogger audit.EventLogger) *LoginUseCase {
+// NewLoginUseCase creates a new LoginUseCase. refreshTokens may be nil during
+// transition; when nil, LoginOutput.RefreshToken is left empty.
+func NewLoginUseCase(
+	users domain.UserRepository,
+	refreshTokens domain.RefreshTokenRepository,
+	verifier PasswordVerifier,
+	jwt TokenGenerator,
+	auditLogger audit.EventLogger,
+	refreshTokenTTL time.Duration,
+) *LoginUseCase {
 	return &LoginUseCase{
-		repo:        repo,
-		verifier:    verifier,
-		jwtService:  jwt,
-		auditLogger: auditLogger,
+		users:           users,
+		refreshTokens:   refreshTokens,
+		verifier:        verifier,
+		jwtService:      jwt,
+		auditLogger:     auditLogger,
+		refreshTokenTTL: refreshTokenTTL,
 	}
 }
 
-// Execute performs the login and returns a token.
-func (uc *LoginUseCase) Execute(ctx context.Context, emailStr, password string) (string, *domain.User, error) {
-	// Validate email format
+// Execute authenticates the user and emits an access + refresh token pair.
+//
+// Returns ErrInvalidCredentials on any auth failure (unknown email / wrong
+// password / invalid format) to avoid user enumeration. Returns
+// ErrUserNotActive when the credentials match but the account is
+// PENDING_EMAIL / SUSPENDED / DELETED.
+func (uc *LoginUseCase) Execute(ctx context.Context, emailStr, password string) (*LoginOutput, error) {
 	email, err := domain.NewEmail(emailStr)
 	if err != nil {
-		return "", nil, domain.ErrInvalidCredentials
+		return nil, domain.ErrInvalidCredentials
 	}
 
-	// Find user
-	user, err := uc.repo.FindByEmail(ctx, email)
+	user, err := uc.users.FindByEmail(ctx, email)
 	if err != nil {
-		// Even if not found, we return InvalidCredentials to avoid user enumeration
-		return "", nil, domain.ErrInvalidCredentials
+		return nil, domain.ErrInvalidCredentials
 	}
-
-	// Verify password
 	if err := uc.verifier.Verify(user.HashedPassword, password); err != nil {
-		return "", nil, domain.ErrInvalidCredentials
+		return nil, domain.ErrInvalidCredentials
+	}
+	if !user.IsActive() {
+		return nil, domain.ErrUserNotActive
 	}
 
-	// Generate token
-	token, err := uc.jwtService.GenerateToken(user)
+	accessToken, err := uc.jwtService.GenerateToken(user)
 	if err != nil {
-		return "", nil, errors.WrapInternal(err)
+		return nil, errors.WrapInternal(err)
 	}
 
-	uc.auditLogger.Execute(ctx, audit.LogEventParams{
-		TenantID:   "", // Login is not tenant-scoped right now
-		ActorID:    user.ID,
-		Action:     auditdomain.ACTION_USER_LOGGED_IN,
-		TargetType: "user",
-		TargetID:   user.ID,
-		Metadata: map[string]any{
-			"email": user.Email,
-		},
-	})
+	out := &LoginOutput{User: user, AccessToken: accessToken}
 
-	return token, user, nil
+	if uc.refreshTokens != nil {
+		rawRefresh, refresh, err := domain.NewRefreshToken(uuid.NewString(), user.ID, "", uc.refreshTokenTTL)
+		if err != nil {
+			return nil, errors.WrapInternal(err)
+		}
+		if err := uc.refreshTokens.Save(ctx, refresh); err != nil {
+			return nil, errors.WrapInternal(err)
+		}
+		out.RefreshToken = rawRefresh
+	}
+
+	if uc.auditLogger != nil {
+		uc.auditLogger.Execute(ctx, audit.LogEventParams{
+			TenantID:   "", // Login is not tenant-scoped
+			ActorID:    user.ID,
+			Action:     auditdomain.ACTION_USER_LOGGED_IN,
+			TargetType: "user",
+			TargetID:   user.ID,
+			Metadata: map[string]any{
+				"email": user.Email.String(),
+			},
+		})
+	}
+
+	return out, nil
 }
