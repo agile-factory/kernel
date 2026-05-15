@@ -1,0 +1,40 @@
+name: Wiki sync
+
+# Mirror docs/ to the AgileFactory/kernel.wiki.git repo on every push to
+# main that touches documentation. The wiki is a flattened copy regenerated
+# from scratch — there is no diff-merge, so deleted source pages disappear
+# from the wiki automatically. See scripts/sync-wiki.sh and the project
+# memory note `doc-hosting-github-wiki.md`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'scripts/sync-wiki.sh'
+      - '.github/workflows/wiki-sync.yml'
+  workflow_dispatch:
+
+# `contents: write` lets the workflow push to the wiki repo (which lives at
+# <repo>.wiki.git under the same access scope as the code repo).
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: false  # serialise pushes to avoid clobbering each other.
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run sync-wiki.sh
+        env:
+          # If the default GITHUB_TOKEN can't push to .wiki.git (some org
+          # configurations restrict this), replace with a PAT stored as
+          # `secrets.WIKI_TOKEN` and re-run.
+          GITHUB_TOKEN: ${{ secrets.WIKI_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: bash scripts/sync-wiki.sh
