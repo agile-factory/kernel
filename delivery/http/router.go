@@ -1,3 +1,14 @@
+// Package http hosts the HTTP middlewares shared by every platform module
+// (Recovery, Logger, Auth, TenantContext) plus thin helpers to compose them.
+//
+// Routes themselves are NOT registered here. Each platform module exposes
+// its own RegisterRoutes(mux) and the consumer main composes them onto a
+// single mux. The helpers in this package layer cross-cutting concerns
+// (panic recovery, structured access logs) on top of that mux.
+//
+// Middleware ordering matters. ApplyGlobalMiddlewares applies, from outermost
+// to innermost: Recovery → Logger → handler. Route-level middlewares
+// (WithAuth, WithTenant) are added selectively by individual handlers.
 package http
 
 import (

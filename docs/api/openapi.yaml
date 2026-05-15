@@ -1,0 +1,767 @@
+openapi: 3.1.0
+info:
+  title: AgileFactory kernel — Public API (v0.1.0)
+  version: 0.1.0
+  description: |
+    Surface HTTP livrée par les modules `platform/{auth,tenant,membership,audit}`
+    de `github.com/AgileFactory/kernel` en v0.1.0.
+
+    **Conventions transverses :**
+    - Toutes les réponses d'erreur suivent l'enveloppe `ErrorEnvelope` (cf. `components.schemas.ErrorEnvelope`).
+    - Codes d'erreur applicatifs (`error.code`) en SCREAMING_SNAKE_CASE — voir `components.schemas.ErrorCode` pour la liste exhaustive.
+    - Pagination v1 : offset (`?limit=&offset=`) avec `total` retourné. Pagination v2 : cursor (`?limit=&cursor=`) avec `next_cursor + has_more`. Cf. ADR-0010 + RFC-0006.
+    - Auth : Bearer JWT (HS256 en v0.1.0, RS256 + JWKS en P1-7 via RFC-0028).
+    - `TraceID` est forwardé dans les erreurs quand présent (corrélation logs / client).
+
+    **Hors scope v0.1.0 :** billing, notification routes admin, SSO, B2B2C surfaces.
+  license:
+    name: Proprietary
+  contact:
+    name: AgileFactory
+    url: https://github.com/AgileFactory/kernel
+
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+  - url: https://api.example.com
+    description: Exemple prod (à remplacer par le consommateur)
+
+tags:
+  - name: auth
+    description: Onboarding, login, refresh, logout (RFC-0007 + RFC-0018)
+  - name: tenants
+    description: CRUD tenants + settings (RFC-0008 + RFC-0018 §3, §9)
+  - name: memberships
+    description: Invitation, révocation, listing (RFC-0004 + RFC-0018 §6)
+  - name: audit
+    description: Listing audit-logs v1 (offset) + v2 (cursor) — RFC-0005 + RFC-0006
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/auth/signup-owner:
+    post:
+      tags: [auth]
+      summary: Onboard un nouveau tenant + son owner
+      description: |
+        Crée tenant + user + membership OWNER + token de vérification email + access/refresh tokens dans une seule transaction.
+        Émet l'événement outbox `auth.signup_owner` (consommé par `platform/notification` → envoi du mail de vérification).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SignupOwnerRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SignupOwnerResponse' }
+        '409':
+          description: Conflit — slug ou email déjà pris (`TENANT_ALREADY_EXISTS` / `USER_ALREADY_EXISTS`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422':
+          description: Validation — `VALIDATION_FAILED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/auth/accept-invite:
+    post:
+      tags: [auth]
+      summary: Accepte une invitation (consomme un invite_token)
+      description: |
+        Consomme un `invite_token` émis par `POST /api/v1/memberships/invite`.
+        Si l'email est inconnu, crée un user (password requis). Sinon, ajoute juste un membership ACTIVE au tenant.
+        Émet `auth.invite_accepted`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptInviteRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcceptInviteResponse' }
+        '400':
+          description: Token absent / mal formé — `BAD_REQUEST`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: Token invalide / révoqué — `INVALID_TOKEN`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '410':
+          description: Token expiré — `TOKEN_EXPIRED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/auth/verify-email:
+    post:
+      tags: [auth]
+      summary: Vérifie l'adresse email d'un user (idempotent)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyEmailRequest' }
+      responses:
+        '204':
+          description: Email vérifié (ou déjà vérifié — idempotent)
+        '401':
+          description: Token invalide — `INVALID_TOKEN`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '410':
+          description: Token expiré — `TOKEN_EXPIRED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Login email + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401':
+          description: Identifiants invalides — `INVALID_CREDENTIALS`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '403':
+          description: Email non vérifié — `EMAIL_NOT_VERIFIED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rolling refresh-token rotation
+      description: |
+        Révoque le refresh-token présenté, émet une nouvelle paire access+refresh.
+        Replay d'un token déjà révoqué → `401 INVALID_TOKEN`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefreshResponse' }
+        '401':
+          description: Refresh-token invalide / révoqué — `INVALID_TOKEN`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Révoque un refresh-token (idempotent)
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LogoutRequest' }
+      responses:
+        '204':
+          description: OK
+
+  /api/v1/tenants/{id}:
+    get:
+      tags: [tenants]
+      summary: Détails d'un tenant
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '403':
+          description: Caller n'est pas membre — `PERMISSION_DENIED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: Tenant introuvable — `TENANT_NOT_FOUND`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    patch:
+      tags: [tenants]
+      summary: Mise à jour du nom du tenant (slug immuable)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '403':
+          description: OWNER/ADMIN requis — `PERMISSION_DENIED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    delete:
+      tags: [tenants]
+      summary: Soft-delete d'un tenant (OWNER seul)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: OK
+        '403':
+          description: OWNER requis — `PERMISSION_DENIED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/tenants/slug/{slug}:
+    get:
+      tags: [tenants]
+      summary: Détails d'un tenant par slug
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '404':
+          description: Tenant introuvable — `TENANT_NOT_FOUND`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/tenants/{id}/settings:
+    get:
+      tags: [tenants]
+      summary: Lit les settings d'un tenant
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SettingsResponse' }
+    patch:
+      tags: [tenants]
+      summary: Met à jour partiellement les settings (OWNER/ADMIN)
+      description: Sparse update — n'inclut que les champs à modifier.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSettingsRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SettingsResponse' }
+
+  /admin/v1/tenants:
+    post:
+      tags: [tenants]
+      summary: Création tenant — sales-assisted onboarding (super-admin)
+      description: |
+        Réservé aux super-admins plateforme (RFC-0018 §9). Crée juste le tenant, **sans** owner.
+        Le user OWNER est invité ensuite via `POST /api/v1/memberships/invite`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name: { type: string }
+                slug: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantResponse' }
+        '403':
+          description: Super-admin requis — `PERMISSION_DENIED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/v1/memberships/invite:
+    post:
+      tags: [memberships]
+      summary: Invite un membre par email (OWNER/ADMIN)
+      description: |
+        Crée un `invite_token` (TTL 7j) et émet `member.invited`. Renvoie le **raw token** —
+        c'est au consommateur de l'inclure dans le mail (ou de le passer à `platform/notification`
+        via l'outbox, qui fait ça automatiquement).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InviteRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InviteResponse' }
+
+  /api/v1/memberships/{id}/revoke:
+    post:
+      tags: [memberships]
+      summary: Révoque un membership (OWNER/ADMIN, idempotent)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204':
+          description: OK
+
+  /api/v1/memberships/tenant/{tenantId}:
+    get:
+      tags: [memberships]
+      summary: Liste les memberships d'un tenant
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MembershipListResponse' }
+
+  /api/v1/memberships/user/{userId}:
+    get:
+      tags: [memberships]
+      summary: Liste les memberships d'un user (self ou platform admin)
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MembershipListResponse' }
+
+  /api/v1/tenants/{tenantId}/audit-logs:
+    get:
+      tags: [audit]
+      summary: Audit-logs d'un tenant — pagination offset (v1)
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogListResponse' }
+
+  /api/v2/tenants/{tenantId}/audit-logs:
+    get:
+      tags: [audit]
+      summary: Audit-logs d'un tenant — pagination cursor (v2)
+      description: |
+        `total` est toujours `-1` (pas de COUNT), `offset` toujours `0`.
+        Utiliser `next_cursor` + `has_more` pour la navigation. Cf. RFC-0006.
+      parameters:
+        - { name: tenantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string }, description: 'Opaque, retourné par la requête précédente' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogListResponseV2' }
+
+  /api/v1/audit-logs:
+    get:
+      tags: [audit]
+      summary: Audit-logs cross-tenant (super-admin) — pagination offset
+      parameters:
+        - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogListResponse' }
+
+  /api/v2/audit-logs:
+    get:
+      tags: [audit]
+      summary: Audit-logs cross-tenant (super-admin) — pagination cursor
+      parameters:
+        - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditLogListResponseV2' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorCode:
+      type: string
+      description: |
+        Code d'erreur applicatif. La liste exhaustive vit dans `kernel/errors/codes.go`.
+      enum:
+        - INTERNAL_SERVER_ERROR
+        - NOT_FOUND
+        - BAD_REQUEST
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - CONFLICT
+        - UNPROCESSABLE_ENTITY
+        - TOO_MANY_REQUESTS
+        - SERVICE_UNAVAILABLE
+        - TIMEOUT
+        - VALIDATION_FAILED
+        - INVALID_CREDENTIALS
+        - INVALID_TOKEN
+        - TOKEN_EXPIRED
+        - USER_NOT_FOUND
+        - USER_ALREADY_EXISTS
+        - INVALID_EMAIL
+        - INVALID_PASSWORD
+        - ACCOUNT_DISABLED
+        - SESSION_NOT_FOUND
+        - EMAIL_NOT_VERIFIED
+        - TENANT_NOT_FOUND
+        - TENANT_SUSPENDED
+        - TENANT_QUOTA_EXCEEDED
+        - TENANT_ALREADY_EXISTS
+        - PERMISSION_DENIED
+        - ROLE_NOT_FOUND
+        - INSUFFICIENT_SCOPE
+        - DB_QUERY_FAILED
+        - DB_CONNECTION_LOST
+        - RECORD_NOT_FOUND
+        - DUPLICATE_ENTRY
+        - STALE_DATA
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string }
+            trace_id:
+              type: string
+              description: Présent si une corrélation a été propagée
+            debug:
+              type: string
+              description: |
+                Présent uniquement en non-prod (APP_ENV ≠ production/staging).
+                Pointeur fichier:ligne du frame d'origine — utile pour debug local.
+      example:
+        error:
+          code: INVALID_CREDENTIALS
+          message: Invalid email or password
+
+    SignupOwnerRequest:
+      type: object
+      required: [tenantName, tenantSlug, email, password]
+      properties:
+        tenantName: { type: string, example: Acme Inc. }
+        tenantSlug: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,98}[a-z0-9]$', example: acme }
+        email:      { type: string, format: email, example: alice@acme.com }
+        password:   { type: string, minLength: 12, format: password, example: supersecretpassword }
+
+    SignupOwnerResponse:
+      type: object
+      properties:
+        tenantId:                 { type: string, format: uuid }
+        userId:                   { type: string, format: uuid }
+        membershipId:             { type: string, format: uuid }
+        accessToken:              { type: string }
+        refreshToken:             { type: string }
+        emailVerificationPending: { type: boolean }
+        user:                     { $ref: '#/components/schemas/UserDTO' }
+
+    AcceptInviteRequest:
+      type: object
+      required: [token]
+      properties:
+        token:    { type: string, minLength: 1 }
+        password:
+          type: string
+          minLength: 12
+          description: Requis si l'email n'a pas encore de user
+
+    AcceptInviteResponse:
+      type: object
+      properties:
+        userId:       { type: string, format: uuid }
+        membershipId: { type: string, format: uuid }
+        tenantId:     { type: string, format: uuid }
+        role:         { $ref: '#/components/schemas/MemberRole' }
+        accessToken:  { type: string }
+        refreshToken: { type: string }
+        user:         { $ref: '#/components/schemas/UserDTO' }
+
+    VerifyEmailRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, format: password }
+
+    LoginResponse:
+      type: object
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string }
+        user:         { $ref: '#/components/schemas/UserDTO' }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    RefreshResponse:
+      type: object
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string }
+
+    LogoutRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          description: Si absent, la requête est un no-op (idempotent).
+
+    UserDTO:
+      type: object
+      properties:
+        id:            { type: string, format: uuid }
+        email:         { type: string, format: email }
+        role:          { type: string }
+        emailVerified: { type: boolean }
+        status:        { type: string }
+        memberships:
+          type: array
+          items: { $ref: '#/components/schemas/MembershipSummary' }
+
+    MembershipSummary:
+      type: object
+      properties:
+        membershipId: { type: string, format: uuid }
+        tenantId:     { type: string, format: uuid }
+        role:         { $ref: '#/components/schemas/MemberRole' }
+        status:       { $ref: '#/components/schemas/MemberStatus' }
+
+    MemberRole:
+      type: string
+      enum: [ROLE_OWNER, ROLE_ADMIN, ROLE_AGENT, ROLE_VIEWER]
+
+    MemberStatus:
+      type: string
+      enum: [PENDING, ACTIVE, REVOKED]
+
+    TenantResponse:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        name:      { type: string }
+        slug:      { type: string }
+        isActive:  { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    SettingsResponse:
+      type: object
+      properties:
+        tenantId:      { type: string, format: uuid }
+        logoUrl:       { type: string }
+        primaryColor:  { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
+        locale:        { type: string, example: en-US }
+        timezone:      { type: string, example: UTC }
+        currency:      { type: string, example: USD }
+        dataRegion:    { type: string, enum: [eu, us, apac] }
+        customDomain:  { type: string }
+        paymentRegion: { type: string, enum: [INTERNATIONAL, CEDEAO] }
+        merchantMode:  { type: boolean }
+        b2b2cEnabled:  { type: boolean }
+
+    UpdateSettingsRequest:
+      type: object
+      description: |
+        Sparse update — n'inclut que les champs à modifier. Les champs absents sont laissés tels quels.
+      properties:
+        logoUrl:       { type: string, nullable: true }
+        primaryColor:  { type: string, nullable: true }
+        locale:        { type: string, nullable: true }
+        timezone:      { type: string, nullable: true }
+        currency:      { type: string, nullable: true }
+        dataRegion:    { type: string, enum: [eu, us, apac], nullable: true }
+        customDomain:  { type: string, nullable: true }
+        paymentRegion: { type: string, enum: [INTERNATIONAL, CEDEAO], nullable: true }
+        merchantMode:  { type: boolean, nullable: true }
+        b2b2cEnabled:  { type: boolean, nullable: true }
+
+    InviteRequest:
+      type: object
+      required: [tenantId, email, role]
+      properties:
+        tenantId: { type: string, format: uuid }
+        email:    { type: string, format: email }
+        role:
+          type: string
+          enum: [ROLE_ADMIN, ROLE_AGENT, ROLE_VIEWER]
+          description: ROLE_OWNER intentionnellement exclu (RFC-0018 §6)
+
+    InviteResponse:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        tenantId:  { type: string, format: uuid }
+        email:     { type: string, format: email }
+        role:      { $ref: '#/components/schemas/MemberRole' }
+        token:     { type: string, description: Raw token — à transmettre via mail (ou laisser l'outbox notification le faire) }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    MembershipResponse:
+      type: object
+      properties:
+        id:        { type: string, format: uuid }
+        userId:    { type: string, format: uuid }
+        tenantId:  { type: string, format: uuid }
+        role:      { $ref: '#/components/schemas/MemberRole' }
+        status:    { $ref: '#/components/schemas/MemberStatus' }
+        invitedBy: { type: string, format: uuid, nullable: true }
+        joinedAt:  { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    MembershipListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/MembershipResponse' }
+        total:  { type: integer }
+        limit:  { type: integer }
+        offset: { type: integer }
+
+    AuditAction:
+      type: string
+      enum:
+        - MEMBER_INVITED
+        - MEMBER_ACCEPTED
+        - MEMBER_REVOKED
+        - USER_REGISTERED
+        - USER_LOGGED_IN
+        - TENANT_CREATED
+
+    AuditLogResponse:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        tenantId:   { type: string, format: uuid, nullable: true }
+        actorId:    { type: string, format: uuid, nullable: true }
+        action:     { $ref: '#/components/schemas/AuditAction' }
+        targetType: { type: string, nullable: true }
+        targetId:   { type: string, format: uuid, nullable: true }
+        metadata:
+          type: object
+          additionalProperties: true
+        occurredAt: { type: string, format: date-time }
+
+    AuditLogListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AuditLogResponse' }
+        total:  { type: integer, description: 'Compteur global — fait via COUNT(*). Pour la pagination cursor (v2), vaut -1.' }
+        limit:  { type: integer }
+        offset: { type: integer }
+
+    AuditLogListResponseV2:
+      type: object
+      description: |
+        Réponse cursor-based. `total = -1` et `offset = 0` par construction —
+        c'est la valeur attendue, ne pas l'utiliser pour autre chose que détecter le mode cursor.
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AuditLogResponse' }
+        total:       { type: integer, example: -1 }
+        limit:       { type: integer }
+        offset:      { type: integer, example: 0 }
+        next_cursor: { type: string, description: 'Opaque, à passer à la requête suivante. Absent sur la dernière page.' }
+        has_more:    { type: boolean }

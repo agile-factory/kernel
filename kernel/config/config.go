@@ -1,3 +1,15 @@
+// Package config loads runtime configuration from environment variables
+// (with optional .env fallback via godotenv). It is the single ingress
+// point for env-driven settings on the kernel side — platform packages
+// MUST NOT call os.Getenv directly (enforced by scripts/lint.sh per
+// RFC-0038).
+//
+// Usage:
+//
+//	cfg := config.Load()
+//	log, _, _ := logger.New(logger.Config{Level: cfg.LogLevel, ...})
+//
+// Recognised variables and defaults are documented on the Config fields.
 package config
 
 import (
