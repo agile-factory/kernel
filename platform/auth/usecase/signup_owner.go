@@ -49,6 +49,7 @@ type SignupOwnerUseCase struct {
 
 	users           authdomain.UserRepository
 	tenants         tenantdomain.TenantRepository
+	tenantSettings  tenantdomain.TenantSettingsRepository
 	memberships     memberdomain.MembershipRepository
 	verifTokens     authdomain.EmailVerificationTokenRepository
 	refreshTokens   authdomain.RefreshTokenRepository
@@ -65,6 +66,7 @@ func NewSignupOwnerUseCase(
 	pool *pgxpool.Pool,
 	users authdomain.UserRepository,
 	tenants tenantdomain.TenantRepository,
+	tenantSettings tenantdomain.TenantSettingsRepository,
 	memberships memberdomain.MembershipRepository,
 	verifTokens authdomain.EmailVerificationTokenRepository,
 	refreshTokens authdomain.RefreshTokenRepository,
@@ -78,6 +80,7 @@ func NewSignupOwnerUseCase(
 		pool:            pool,
 		users:           users,
 		tenants:         tenants,
+		tenantSettings:  tenantSettings,
 		memberships:     memberships,
 		verifTokens:     verifTokens,
 		refreshTokens:   refreshTokens,
@@ -135,6 +138,9 @@ func (uc *SignupOwnerUseCase) Execute(ctx context.Context, tenantName, tenantSlu
 			return err
 		}
 		if err := uc.tenants.Save(ctx, tenant); err != nil {
+			return errors.WrapInternal(err)
+		}
+		if err := uc.tenantSettings.Save(ctx, tenantdomain.DefaultSettings(tenant.ID)); err != nil {
 			return errors.WrapInternal(err)
 		}
 		out.Tenant = tenant

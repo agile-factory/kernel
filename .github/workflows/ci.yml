@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature]
+  pull_request:
+    branches: [main]
+
+# Tighten the default GITHUB_TOKEN scope: read-only on everything CI needs.
+permissions:
+  contents: read
+
+# Cancel in-flight runs of the same ref when a new commit lands — saves CI
+# minutes and avoids stale green ticks landing after a real failure.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: build + vet + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: go mod tidy is up-to-date
+        # Fail fast if anyone forgot to run `go mod tidy` after touching deps.
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test (race + coverage)
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: ignore
+
+  staticcheck:
+    name: staticcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+      - name: staticcheck
+        # Pinned version so behaviour is reproducible; bump intentionally.
+        # v0.7.0 is the first release that supports Go 1.25 (released 2026-Q1).
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
+
+  lint-conventions:
+    name: RFC-0038 conventions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run convention lints
+        run: bash scripts/lint.sh
+
+  lint-migrations:
+    name: migration filenames
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate migration naming
+        run: bash scripts/lint-migrations.sh

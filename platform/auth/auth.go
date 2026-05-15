@@ -37,13 +37,14 @@ type Config struct {
 	// transaction (SignupOwner, AcceptInvite, VerifyEmail, RefreshToken).
 	Pool *pgxpool.Pool
 
-	UserRepo         UserRepository
-	TenantRepo       tenantdomain.TenantRepository
-	MembershipRepo   memberdomain.MembershipRepository
-	InviteTokenRepo  memberdomain.InviteTokenRepository
-	RefreshTokenRepo domain.RefreshTokenRepository
-	EmailVerifRepo   domain.EmailVerificationTokenRepository
-	MembershipListUC *memberusecase.ListMembersUseCase
+	UserRepo           UserRepository
+	TenantRepo         tenantdomain.TenantRepository
+	TenantSettingsRepo tenantdomain.TenantSettingsRepository
+	MembershipRepo     memberdomain.MembershipRepository
+	InviteTokenRepo    memberdomain.InviteTokenRepository
+	RefreshTokenRepo   domain.RefreshTokenRepository
+	EmailVerifRepo     domain.EmailVerificationTokenRepository
+	MembershipListUC   *memberusecase.ListMembersUseCase
 
 	AuditLogger audit.EventLogger
 	Publisher   events.Publisher // nil-safe; events.signup_owner etc. skipped when nil
@@ -83,6 +84,7 @@ func New(cfg Config) *Module {
 		cfg.Pool,
 		cfg.UserRepo,
 		cfg.TenantRepo,
+		cfg.TenantSettingsRepo,
 		cfg.MembershipRepo,
 		cfg.EmailVerifRepo,
 		cfg.RefreshTokenRepo,

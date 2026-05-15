@@ -55,6 +55,19 @@ func (r *PostgresTenantRepository) ExistsBySlug(ctx context.Context, slug string
 	return exists, nil
 }
 
+// UpdateName changes the tenant's display name.
+func (r *PostgresTenantRepository) UpdateName(ctx context.Context, id, name string) error {
+	_, err := txctx.DB(ctx, r.db).Exec(ctx, queryUpdateTenantName, id, name)
+	return err
+}
+
+// SoftDelete flips is_active to FALSE. Tenant row is preserved so that
+// historical references (audit logs, memberships) stay valid.
+func (r *PostgresTenantRepository) SoftDelete(ctx context.Context, id string) error {
+	_, err := txctx.DB(ctx, r.db).Exec(ctx, querySoftDeleteTenant, id)
+	return err
+}
+
 // scanTenant maps a pgx row into a Tenant value object.
 func (r *PostgresTenantRepository) scanTenant(row pgx.Row) (*domain.Tenant, error) {
 	var t domain.Tenant

@@ -13,31 +13,29 @@ import (
 )
 
 // MembershipHandler handles HTTP requests for membership management.
+//
+// Per RFC-0018 §6 the Accept flow no longer lives here — the invitee
+// redeems an invite token via POST /api/v1/auth/accept-invite.
 type MembershipHandler struct {
-	inviteUC  *usecase.InviteMemberUseCase
-	acceptUC  *usecase.AcceptInviteUseCase
-	revokeUC  *usecase.RevokeMemberUseCase
-	listUC    *usecase.ListMembersUseCase
+	inviteUC *usecase.InviteMemberUseCase
+	revokeUC *usecase.RevokeMemberUseCase
+	listUC   *usecase.ListMembersUseCase
 }
 
-// NewMembershipHandler creates a new MembershipHandler.
 func NewMembershipHandler(
 	inviteUC *usecase.InviteMemberUseCase,
-	acceptUC *usecase.AcceptInviteUseCase,
 	revokeUC *usecase.RevokeMemberUseCase,
 	listUC *usecase.ListMembersUseCase,
 ) *MembershipHandler {
 	return &MembershipHandler{
 		inviteUC: inviteUC,
-		acceptUC: acceptUC,
 		revokeUC: revokeUC,
 		listUC:   listUC,
 	}
 }
 
-// Invite handles POST /memberships/invite
-// The acting user ID is read from the request context (populated by the Auth
-// middleware after JWT verification) — never from a client-controllable header.
+// Invite handles POST /api/v1/memberships/invite. The acting user ID comes
+// from the auth middleware context — never from a client header.
 func (h *MembershipHandler) Invite(w http.ResponseWriter, r *http.Request) {
 	inviterID := kernelauth.UserIDFromContext(r.Context())
 	if inviterID == "" {
@@ -55,39 +53,15 @@ func (h *MembershipHandler) Invite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	membership, err := h.inviteUC.Execute(r.Context(), inviterID, req.TenantID, req.InviteeUserID, domain.MemberRole(req.Role))
+	out, err := h.inviteUC.Execute(r.Context(), inviterID, req.TenantID, req.Email, domain.MemberRole(req.Role))
 	if err != nil {
 		response.Error(w, err)
 		return
 	}
-
-	response.JSON(w, http.StatusCreated, toMembershipResponse(membership))
+	response.JSON(w, http.StatusCreated, toInviteResponse(out.Invite, out.RawToken))
 }
 
-// Accept handles POST /memberships/{id}/accept
-func (h *MembershipHandler) Accept(w http.ResponseWriter, r *http.Request) {
-	callerID := kernelauth.UserIDFromContext(r.Context())
-	if callerID == "" {
-		response.Error(w, errors.Unauthorized("authentication required"))
-		return
-	}
-
-	membershipID := r.PathValue("id")
-	if membershipID == "" {
-		response.Error(w, errors.BadRequest("membership id is required"))
-		return
-	}
-
-	membership, err := h.acceptUC.Execute(r.Context(), membershipID, callerID)
-	if err != nil {
-		response.Error(w, err)
-		return
-	}
-
-	response.JSON(w, http.StatusOK, toMembershipResponse(membership))
-}
-
-// Revoke handles POST /memberships/{id}/revoke
+// Revoke handles POST /api/v1/memberships/{id}/revoke.
 func (h *MembershipHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 	revokerID := kernelauth.UserIDFromContext(r.Context())
 	if revokerID == "" {
@@ -106,64 +80,47 @@ func (h *MembershipHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-
 	response.JSON(w, http.StatusOK, toMembershipResponse(membership))
 }
 
-// ListByTenant handles GET /memberships/tenant/{tenantId}
-// Supports pagination via ?limit=N&offset=N query params.
+// ListByTenant handles GET /api/v1/memberships/tenant/{tenantId}. Supports
+// pagination via ?limit=N&offset=N (max limit 200).
 func (h *MembershipHandler) ListByTenant(w http.ResponseWriter, r *http.Request) {
 	tenantID := r.PathValue("tenantId")
 	if tenantID == "" {
 		response.Error(w, errors.BadRequest("tenantId is required"))
 		return
 	}
-
 	memberships, err := h.listUC.ByTenant(r.Context(), tenantID)
 	if err != nil {
 		response.Error(w, err)
 		return
 	}
-
-	limit, offset := parseMembershipPage(r)
-	page := applyPage(memberships, limit, offset)
-
-	result := make([]MembershipResponse, len(page))
-	for i, m := range page {
-		result[i] = toMembershipResponse(m)
-	}
-
-	response.JSON(w, http.StatusOK, map[string]any{
-		"data":   result,
-		"total":  len(memberships),
-		"limit":  limit,
-		"offset": offset,
-	})
+	h.respondList(w, r, memberships)
 }
 
-// ListByUser handles GET /memberships/user/{userId}
-// Supports pagination via ?limit=N&offset=N query params.
+// ListByUser handles GET /api/v1/memberships/user/{userId}.
 func (h *MembershipHandler) ListByUser(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userId")
 	if userID == "" {
 		response.Error(w, errors.BadRequest("userId is required"))
 		return
 	}
-
 	memberships, err := h.listUC.ByUser(r.Context(), userID)
 	if err != nil {
 		response.Error(w, err)
 		return
 	}
+	h.respondList(w, r, memberships)
+}
 
+func (h *MembershipHandler) respondList(w http.ResponseWriter, r *http.Request, memberships []*domain.Membership) {
 	limit, offset := parseMembershipPage(r)
 	page := applyPage(memberships, limit, offset)
-
 	result := make([]MembershipResponse, len(page))
 	for i, m := range page {
 		result[i] = toMembershipResponse(m)
 	}
-
 	response.JSON(w, http.StatusOK, map[string]any{
 		"data":   result,
 		"total":  len(memberships),
@@ -192,7 +149,6 @@ func parseMembershipPage(r *http.Request) (limit, offset int) {
 	return
 }
 
-// applyPage slices a membership list for in-memory pagination.
 func applyPage(all []*domain.Membership, limit, offset int) []*domain.Membership {
 	if offset >= len(all) {
 		return []*domain.Membership{}
