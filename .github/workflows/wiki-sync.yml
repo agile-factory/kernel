@@ -5,14 +5,21 @@ name: Wiki sync
 # from scratch — there is no diff-merge, so deleted source pages disappear
 # from the wiki automatically. See scripts/sync-wiki.sh and the project
 # memory note `doc-hosting-github-wiki.md`.
+#
+# TEMPORARILY DISABLED (2026-05-15): the GitHub wiki repo has not been
+# bootstrapped via the UI yet, so any push will 404. Re-enable by
+# uncommenting the `push:` block below once the wiki has been initialised
+# (Settings → Features → Wikis + create-the-first-page).
+# `workflow_dispatch` stays on so the workflow can still be triggered
+# manually from the Actions tab after the bootstrap, for verification.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'docs/**'
-      - 'scripts/sync-wiki.sh'
-      - '.github/workflows/wiki-sync.yml'
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'docs/**'
+  #     - 'scripts/sync-wiki.sh'
+  #     - '.github/workflows/wiki-sync.yml'
   workflow_dispatch:
 
 # `contents: write` lets the workflow push to the wiki repo (which lives at

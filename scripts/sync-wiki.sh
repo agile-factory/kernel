@@ -62,15 +62,34 @@ if [[ $CLONED == true ]]; then
     exit 1
   fi
   bold "→ Cloning ${REPO_OWNER}/${REPO_NAME}.wiki"
-  git clone --quiet --depth=1 \
-    "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.wiki.git" \
-    "$WIKI_DIR" 2>/dev/null || {
-      # First-time push: wiki repo doesn't exist yet — init a fresh one.
-      bold "  Wiki repo not initialised yet; bootstrapping."
-      git init --quiet -b master "$WIKI_DIR"
-      (cd "$WIKI_DIR" && git remote add origin \
-        "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.wiki.git")
-    }
+  clone_err=$(mktemp)
+  if git clone --quiet --depth=1 \
+      "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.wiki.git" \
+      "$WIKI_DIR" 2>"$clone_err"; then
+    rm -f "$clone_err"
+  else
+    if grep -qi "Repository not found\|not found" "$clone_err"; then
+      red "Wiki repository does not yet exist on GitHub."
+      red ""
+      red "GitHub provisions the .wiki.git repo lazily — only after the first"
+      red "page has been authored through the web UI. A local 'git init' here"
+      red "cannot work around that; any push will keep failing with 404."
+      red ""
+      red "One-time bootstrap (≈30 seconds):"
+      red "  1. Open https://github.com/${REPO_OWNER}/${REPO_NAME}/settings"
+      red "     → Features → tick 'Wikis'."
+      red "  2. Open https://github.com/${REPO_OWNER}/${REPO_NAME}/wiki"
+      red "     → 'Create the first page' → leave any content → 'Save Page'."
+      red "  3. Re-run this workflow from the Actions tab."
+      red ""
+      red "From then on this script mirrors docs/ into the wiki on every push."
+    else
+      red "Failed to clone wiki repository:"
+      sed 's/^/  /' "$clone_err" >&2
+    fi
+    rm -f "$clone_err"
+    exit 1
+  fi
 fi
 
 # Wipe everything except .git — full mirror semantics avoid stale pages
@@ -237,7 +256,22 @@ if [[ $CLONED == true ]]; then
   git -c user.email="ci-bot@agilefactory.local" \
       -c user.name="kernel-wiki-sync" \
       commit --quiet -m "docs: sync from kernel@${GITHUB_SHA:-HEAD}"
-  git push --quiet origin HEAD:master
+  # GitHub wikis use `master` as their default branch regardless of the
+  # main repo default. Push explicitly against it.
+  push_err=$(mktemp)
+  if ! git push --quiet origin HEAD:master 2>"$push_err"; then
+    red "Push to wiki failed:"
+    sed 's/^/  /' "$push_err" >&2
+    if grep -qi "permission denied\|403" "$push_err"; then
+      red ""
+      red "The default GITHUB_TOKEN can't push to this wiki. Generate a PAT"
+      red "with 'repo' scope and store it as secrets.WIKI_TOKEN; the workflow"
+      red "is already wired to prefer WIKI_TOKEN over the default token."
+    fi
+    rm -f "$push_err"
+    exit 1
+  fi
+  rm -f "$push_err"
   green "✓ Wiki pushed."
 else
   green "✓ Wiki tree written to $WIKI_DIR (no push)."
