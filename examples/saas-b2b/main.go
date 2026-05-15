@@ -28,6 +28,8 @@ import (
 	authinfra "github.com/AgileFactory/kernel/platform/auth/infrastructure"
 	"github.com/AgileFactory/kernel/platform/membership"
 	memberinfra "github.com/AgileFactory/kernel/platform/membership/infrastructure"
+	"github.com/AgileFactory/kernel/platform/notification"
+	notifinfra "github.com/AgileFactory/kernel/platform/notification/infrastructure"
 	"github.com/AgileFactory/kernel/platform/tenant"
 	tenantinfra "github.com/AgileFactory/kernel/platform/tenant/infrastructure"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -70,6 +72,7 @@ func main() {
 		{Name: "auth", FS: auth.Migrations, Path: "migrations"},
 		{Name: "membership", FS: membership.Migrations, Path: "migrations"},
 		{Name: "audit", FS: audit.Migrations, Path: "migrations"},
+		{Name: "notification", FS: notification.Migrations, Path: "migrations"},
 	}); err != nil {
 		slog.Error("Failed to run database migrations", "error", err)
 		os.Exit(1)
@@ -98,6 +101,7 @@ func main() {
 	refreshTokenRepo := authinfra.NewPostgresRefreshTokenRepository(db)
 	emailVerifRepo := authinfra.NewPostgresEmailVerificationTokenRepository(db)
 	inviteTokenRepo := memberinfra.NewPostgresInviteTokenRepository(db)
+	notifLogRepo := notifinfra.NewPostgresNotificationLogRepository(db)
 
 	// ── Modules ──────────────────────────────────────────────────────────────
 	// The audit Module currently uses best-effort direct injection (ADR-0009
@@ -147,6 +151,23 @@ func main() {
 		TokenLifespan:      cfg.TokenLifespan,
 	})
 
+	// Notification module — subscribes to outbox events emitted by auth /
+	// membership and renders + sends emails. v0.1.0 ships a ConsoleSender
+	// fallback (logs the rendered email) so the binary runs without an
+	// SMTP server configured.
+	notifMod, err := notification.New(notification.Config{
+		LogRepo:     notifLogRepo,
+		EmailSender: notification.NewConsoleSender(log),
+		Logger:      log,
+		From:        "no-reply@agilefactory.local",
+		BaseURL:     "http://localhost:" + cfg.Port,
+	})
+	if err != nil {
+		slog.Error("Failed to initialise notification module", "error", err)
+		os.Exit(1)
+	}
+	notifMod.Subscribe(bus) // register handlers before bus.Run starts.
+
 	// ── HTTP wiring ──────────────────────────────────────────────────────────
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +179,7 @@ func main() {
 	tenantMod.RegisterRoutes(mux)
 	memberMod.RegisterRoutes(mux)
 	authMod.RegisterRoutes(mux)
+	notifMod.RegisterRoutes(mux)
 
 	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(mux, log))
 
