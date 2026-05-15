@@ -1,3 +1,20 @@
+// Package response writes JSON success and error envelopes for the HTTP
+// delivery layer. Error always works through *errors.AppError: any error
+// passed in is unwrapped via errors.As, so wrapped AppErrors keep their
+// code, message and HTTP status all the way to the client.
+//
+// In development the response body includes the originating stack frame
+// under "debug" so a caller can jump straight to the source without
+// scraping server logs. In staging/production that field is suppressed —
+// only Code, Message and TraceID reach the wire.
+//
+// Usage:
+//
+//	if err := uc.Execute(ctx, params); err != nil {
+//	    response.Error(w, err)
+//	    return
+//	}
+//	response.JSON(w, http.StatusOK, dto)
 package response
 
 import (

@@ -7,9 +7,15 @@
 #
 #   docs/architecture/overview.md                 → Architecture-Overview.md
 #   docs/architecture/file-structure.md           → File-Structure.md
+#   docs/architecture/technical-deepdive.md       → Technical-Deepdive.md
+#   docs/architecture/diagrams/<name>.md          → Diagram-<Name>.md
 #   docs/architecture/rfcs/NNNN-Title.md          → RFC-NNNN-Title.md
 #   docs/architecture/adrs/NNNN-Title.md          → ADR-NNNN-Title.md
 #   docs/development/conventions.md               → Conventions.md
+#   docs/development/integration-guide.md         → Integration-Guide.md
+#   docs/operations/runbook.md                    → Runbook.md
+#
+# NOT mirrored: docs/api/openapi.yaml (YAML, link only from Home.md).
 #
 # Plus generated:
 #   Home.md      — landing page grouped by type
@@ -119,19 +125,30 @@ rewrite_links() {
   # Order matters: explicit prefixes first, then bare same-dir.
   #   1. `../rfcs/NNNN-X.md` (with or without ./) → `RFC-NNNN-X`
   #   2. `../adrs/NNNN-X.md`                      → `ADR-NNNN-X`
-  #   3. `overview.md` (and variants)             → `Architecture-Overview`
-  #   4. `file-structure.md`                      → `File-Structure`
-  #   5. `conventions.md`                         → `Conventions`
-  #   6. bare `NNNN-X.md` if domain matches       → `RFC|ADR-NNNN-X`
+  #   3. `architecture/diagrams/<name>.md`        → `Diagram-<Name>`
+  #   4. `architecture/overview.md` (and variants) → `Architecture-Overview`
+  #   5. `architecture/file-structure.md`         → `File-Structure`
+  #   6. `architecture/technical-deepdive.md`     → `Technical-Deepdive`
+  #   7. `development/conventions.md`             → `Conventions`
+  #   8. `development/integration-guide.md`       → `Integration-Guide`
+  #   9. `operations/runbook.md`                  → `Runbook`
+  #  10. bare `NNNN-X.md` if domain matches       → `RFC|ADR-NNNN-X`
   sed -E \
     -e 's|\.\./?rfcs/([0-9]{4})-([^).]+)\.md|RFC-\1-\2|g' \
     -e 's|\.\./?adrs/([0-9]{4})-([^).]+)\.md|ADR-\1-\2|g' \
+    -e 's|\.\./?architecture/diagrams/([a-z0-9-]+)\.md|Diagram-\1|g' \
     -e 's|\.\./?architecture/overview\.md|Architecture-Overview|g' \
     -e 's|\.\./?architecture/file-structure\.md|File-Structure|g' \
+    -e 's|\.\./?architecture/technical-deepdive\.md|Technical-Deepdive|g' \
     -e 's|\.\./?development/conventions\.md|Conventions|g' \
+    -e 's|\.\./?development/integration-guide\.md|Integration-Guide|g' \
+    -e 's|\.\./?operations/runbook\.md|Runbook|g' \
     -e 's|\boverview\.md\b|Architecture-Overview|g' \
     -e 's|\bfile-structure\.md\b|File-Structure|g' \
+    -e 's|\btechnical-deepdive\.md\b|Technical-Deepdive|g' \
     -e 's|\bconventions\.md\b|Conventions|g' \
+    -e 's|\bintegration-guide\.md\b|Integration-Guide|g' \
+    -e 's|\brunbook\.md\b|Runbook|g' \
     "$src" > "$dst"
 
   # Pass 2: bare `NNNN-X.md` in the source's own domain. We restrict to
@@ -162,9 +179,23 @@ copy_and_rewrite() {
 bold "→ Mapping docs/ → wiki pages"
 
 # Flat root entries.
-copy_and_rewrite "$SRC_DOCS/architecture/overview.md"       "Architecture-Overview.md"
-copy_and_rewrite "$SRC_DOCS/architecture/file-structure.md" "File-Structure.md"
-copy_and_rewrite "$SRC_DOCS/development/conventions.md"     "Conventions.md"
+copy_and_rewrite "$SRC_DOCS/architecture/overview.md"           "Architecture-Overview.md"
+copy_and_rewrite "$SRC_DOCS/architecture/file-structure.md"     "File-Structure.md"
+copy_and_rewrite "$SRC_DOCS/architecture/technical-deepdive.md" "Technical-Deepdive.md"
+copy_and_rewrite "$SRC_DOCS/development/conventions.md"         "Conventions.md"
+copy_and_rewrite "$SRC_DOCS/development/integration-guide.md"   "Integration-Guide.md"
+copy_and_rewrite "$SRC_DOCS/operations/runbook.md"              "Runbook.md"
+
+# Diagrams: docs/architecture/diagrams/<name>.md → Diagram-<Name>.md
+# (capitalise first letter; everything else stays kebab — wiki collapses
+# both 'Diagram-Erd' and 'Diagram-erd' to the same slug)
+if [[ -d $SRC_DOCS/architecture/diagrams ]]; then
+  while IFS= read -r f; do
+    base="$(basename "$f" .md)"
+    cap="$(echo "$base" | sed -E 's/^(.)/\U\1/')"
+    copy_and_rewrite "$f" "Diagram-${cap}.md"
+  done < <(find "$SRC_DOCS/architecture/diagrams" -maxdepth 1 -type f -name '*.md' | sort)
+fi
 
 # RFCs — pattern matches `NNNN-Title[.md]` (the legacy 0003 file misses .md).
 while IFS= read -r f; do
@@ -193,9 +224,25 @@ bold "→ Generating Home + _Sidebar"
   echo
   echo "## Démarrer"
   echo
+  echo "- [Integration Guide](Integration-Guide) — tutoriel pas-à-pas pour intégrer kernel dans un repo SaaS."
   echo "- [Architecture Overview](Architecture-Overview) — stack, layering, profils (SaaS B2B, B2B2C, BaaS)."
   echo "- [File Structure](File-Structure) — plan du repo et conventions de packaging."
   echo "- [Conventions](Conventions) — naming, formatting, contribution rules."
+  echo
+  echo "## Approfondir"
+  echo
+  echo "- [Technical deep-dive](Technical-Deepdive) — invariants critiques (outbox, txctx, AppError, multi-tenancy…)."
+  echo "- [Runbook](Runbook) — procédures d'exploitation : deploy, migrations, rollback, outbox stuck."
+  echo "- OpenAPI 3 : [openapi.yaml](https://github.com/${REPO_OWNER}/${REPO_NAME}/blob/main/docs/api/openapi.yaml) (rendu via Swagger UI / Redoc)."
+  echo
+  echo "## Diagrammes"
+  echo
+  while IFS= read -r f; do
+    base="$(basename "$f" .md)"
+    title="$(head -1 "$f" | sed -E 's/^# *//')"
+    [[ -z $title ]] && title="$base"
+    echo "- [${title}](${base})"
+  done < <(find "$WIKI_DIR" -maxdepth 1 -name 'Diagram-*.md' -type f | sort)
   echo
   echo "## RFCs"
   echo
@@ -223,9 +270,22 @@ bold "→ Generating Home + _Sidebar"
   echo
   echo "**Démarrer**"
   echo
+  echo "- [Integration Guide](Integration-Guide)"
   echo "- [Architecture](Architecture-Overview)"
   echo "- [Structure du repo](File-Structure)"
   echo "- [Conventions](Conventions)"
+  echo
+  echo "**Approfondir**"
+  echo
+  echo "- [Technical deep-dive](Technical-Deepdive)"
+  echo "- [Runbook](Runbook)"
+  echo
+  echo "**Diagrammes**"
+  echo
+  while IFS= read -r f; do
+    base="$(basename "$f" .md)"
+    echo "- [${base#Diagram-}](${base})"
+  done < <(find "$WIKI_DIR" -maxdepth 1 -name 'Diagram-*.md' -type f | sort)
   echo
   echo "**RFCs**"
   echo

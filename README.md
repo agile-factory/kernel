@@ -208,12 +208,19 @@ kernel/
 │   └── saas-b2b/               # MVP B2B minimal — main.go de référence
 ├── docs/
 │   ├── architecture/
-│   │   ├── overview.md         # Vue d'ensemble (stack, layering, wiring)
-│   │   ├── file-structure.md   # Détail du plan du repo
-│   │   ├── adrs/               # Architecture Decision Records (0001-0010)
-│   │   └── rfcs/               # Requests For Comments (0001-0026, 0028, 0038)
-│   └── development/
-│       └── conventions.md
+│   │   ├── overview.md             # Vue d'ensemble (stack, layering, wiring)
+│   │   ├── file-structure.md       # Détail du plan du repo
+│   │   ├── technical-deepdive.md   # Invariants critiques (outbox, txctx, audit, AppError...)
+│   │   ├── adrs/                   # Architecture Decision Records (0001-0010)
+│   │   ├── rfcs/                   # Requests For Comments (0001-0026, 0028, 0038)
+│   │   └── diagrams/               # mermaid: layering + signup/invite/outbox flows + ERD
+│   ├── api/
+│   │   └── openapi.yaml            # Référence OpenAPI 3 — tous les endpoints v0.1.0
+│   ├── development/
+│   │   ├── conventions.md
+│   │   └── integration-guide.md    # Tutoriel pas-à-pas pour un consommateur
+│   └── operations/
+│       └── runbook.md              # Procédures ops : deploy, migrations, rollback, outbox stuck...
 ├── scripts/                    # Lints + sync-wiki + utilitaires CI
 ├── .github/workflows/          # CI (build/vet/test/staticcheck/lints) + wiki-sync
 ├── go.mod                      # module github.com/AgileFactory/kernel
@@ -349,7 +356,25 @@ GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) :
 | `lint-conventions` | [`scripts/lint.sh`](scripts/lint.sh) — RFC-0038 : no `init()`, no `os.Getenv` dans `platform/`, no `internal/`, no import `cmd/`/`examples/` depuis `platform/` |
 | `lint-migrations` | [`scripts/lint-migrations.sh`](scripts/lint-migrations.sh) — naming `NNNN_<desc>.{up,down}.sql`, paires complètes, versions uniques par package |
 
-Le workflow [`wiki-sync.yml`](.github/workflows/wiki-sync.yml) mirroite `docs/` → GitHub Wiki. **Actuellement désactivé** (trigger `push` commenté) tant que le wiki n'a pas été bootstrappé manuellement via l'UI ; `workflow_dispatch` reste actif pour test manuel.
+Le workflow [`wiki-sync.yml`](.github/workflows/wiki-sync.yml) mirroite `docs/` → GitHub Wiki **sur chaque push à `main`** qui touche `docs/`, `scripts/sync-wiki.sh` ou le workflow lui-même. `workflow_dispatch` reste disponible pour rebuild manuel (force-resync après édition du script).
+
+---
+
+## Documentation
+
+> Source de vérité dans `docs/`. Mirror lecture sur le [Wiki GitHub](https://github.com/AgileFactory/kernel/wiki) (auto-sync).
+
+| Audience | Document | Quand le lire |
+|---|---|---|
+| **Nouveau consommateur** | [Integration Guide](docs/development/integration-guide.md) | Première intégration de `kernel` dans un repo SaaS — tutoriel pas-à-pas (30 min). |
+| **Frontend / mobile / intégrateur API** | [OpenAPI 3](docs/api/openapi.yaml) | Référence exhaustive des endpoints v0.1.0 — schémas, codes d'erreur, exemples. |
+| **Contributeur kernel** | [Technical deep-dive](docs/architecture/technical-deepdive.md) | Comprendre les invariants critiques (outbox, txctx, cycle audit↔membership, AppError…). |
+| **Architecte** | [Architecture overview](docs/architecture/overview.md) + [diagrammes](docs/architecture/diagrams/) | Vue d'ensemble, séquences (signup, invite, outbox), ERD. |
+| **SRE / oncall** | [Runbook](docs/operations/runbook.md) | Procédures d'exploitation : deploy, migrations zero-downtime, rollback, outbox bloqué, rotation JWT_SECRET, RGPD. |
+| **Tous** | [RFCs](docs/architecture/rfcs/) + [ADRs](docs/architecture/adrs/) | Source de vérité des décisions architecturales — voir tableau plus haut. |
+
+Chaque module livré porte son propre README détaillé :
+[`platform/audit/`](platform/audit/README.md) · [`platform/auth/`](platform/auth/README.md) · [`platform/membership/`](platform/membership/README.md) · [`platform/tenant/`](platform/tenant/README.md) · [`platform/notification/`](platform/notification/README.md)
 
 ---
 

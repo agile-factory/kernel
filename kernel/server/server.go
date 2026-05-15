@@ -1,3 +1,11 @@
+// Package server is a thin wrapper around *http.Server. It exists so the
+// example main.go (and consumer mains) stay short — Bind address comes from
+// config.Config, and Start / Shutdown match the lifecycle the rest of the
+// kernel expects.
+//
+// Graceful shutdown is the caller's responsibility — wire a signal
+// listener and call Shutdown(ctx) with a deadline; the example in
+// examples/saas-b2b/main.go shows the canonical pattern.
 package server
 
 import (

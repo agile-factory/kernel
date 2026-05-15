@@ -1,3 +1,7 @@
+// Package validator hosts small, stateless input checks shared across the
+// platform packages (email shape, non-empty strings, …). It is intentionally
+// minimal: anything more complex than a regex belongs in a domain validator
+// next to the type it constrains, not here.
 package validator
 
 import (
