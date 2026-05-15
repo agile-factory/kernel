@@ -8,10 +8,13 @@
 --              is detected at the unique constraint.
 -- ============================================================
 
+-- tenant_id is nullable: SignupOwner / AcceptInvite mint tokens bound to a
+-- specific tenant (the just-created / just-joined one), but a plain Login
+-- response is not tenant-scoped — the caller picks a tenant per-request.
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id    UUID         NOT NULL REFERENCES users   (id) ON DELETE CASCADE,
-    tenant_id  UUID         NOT NULL REFERENCES tenants (id) ON DELETE CASCADE,
+    tenant_id  UUID         REFERENCES tenants (id) ON DELETE CASCADE,
     token_hash CHAR(64)     NOT NULL UNIQUE,                 -- hex SHA-256
     expires_at TIMESTAMPTZ  NOT NULL DEFAULT (NOW() + INTERVAL '30 days'),
     revoked_at TIMESTAMPTZ,

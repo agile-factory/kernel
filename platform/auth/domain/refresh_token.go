@@ -12,10 +12,14 @@ import (
 // RefreshToken is an opaque long-lived credential the client trades for a
 // fresh access token. Only the hex SHA-256 of the raw token is stored —
 // the raw value lives only on the wire and in the client. Per RFC-0018 §5.
+//
+// TenantID is optional: SignupOwner / AcceptInvite produce a tenant-scoped
+// token (the just-created / just-joined tenant), but a plain Login response
+// is not tenant-scoped — the caller picks a tenant per-request via the JWT.
 type RefreshToken struct {
 	ID        string
 	UserID    string
-	TenantID  string
+	TenantID  string // "" when the token is not tenant-scoped
 	TokenHash string // hex SHA-256 of the opaque token
 	ExpiresAt time.Time
 	RevokedAt *time.Time

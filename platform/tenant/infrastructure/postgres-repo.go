@@ -3,17 +3,18 @@ package infrastructure
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
+	"github.com/AgileFactory/kernel/kernel/txctx"
 	"github.com/AgileFactory/kernel/platform/tenant/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PostgresTenantRepository is the Postgres implementation of domain.TenantRepository.
+// PostgresTenantRepository is the Postgres implementation of
+// domain.TenantRepository. All operations honour an in-context pgx.Tx via
+// txctx.DB so the repo can be enrolled in an outer transaction.
 type PostgresTenantRepository struct {
-	mu sync.RWMutex
 	db *pgxpool.Pool
 }
 
@@ -22,12 +23,9 @@ func NewPostgresTenantRepository(db *pgxpool.Pool) *PostgresTenantRepository {
 	return &PostgresTenantRepository{db: db}
 }
 
-// Save persists a new tenant to the database.
+// Save persists a new tenant.
 func (r *PostgresTenantRepository) Save(ctx context.Context, t *domain.Tenant) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	_, err := r.db.Exec(ctx, queryInsertTenant,
+	_, err := txctx.DB(ctx, r.db).Exec(ctx, queryInsertTenant,
 		t.ID,
 		t.Name,
 		t.Slug,
@@ -40,27 +38,18 @@ func (r *PostgresTenantRepository) Save(ctx context.Context, t *domain.Tenant) e
 
 // FindByID retrieves a tenant by its UUID.
 func (r *PostgresTenantRepository) FindByID(ctx context.Context, id string) (*domain.Tenant, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return r.scanTenant(r.db.QueryRow(ctx, queryGetTenantByID, id))
+	return r.scanTenant(txctx.DB(ctx, r.db).QueryRow(ctx, queryGetTenantByID, id))
 }
 
 // FindBySlug retrieves a tenant by its unique slug.
 func (r *PostgresTenantRepository) FindBySlug(ctx context.Context, slug string) (*domain.Tenant, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return r.scanTenant(r.db.QueryRow(ctx, queryGetTenantBySlug, slug))
+	return r.scanTenant(txctx.DB(ctx, r.db).QueryRow(ctx, queryGetTenantBySlug, slug))
 }
 
 // ExistsBySlug returns true when a tenant with the given slug already exists.
 func (r *PostgresTenantRepository) ExistsBySlug(ctx context.Context, slug string) (bool, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	var exists bool
-	if err := r.db.QueryRow(ctx, queryTenantExistsBySlug, slug).Scan(&exists); err != nil {
+	if err := txctx.DB(ctx, r.db).QueryRow(ctx, queryTenantExistsBySlug, slug).Scan(&exists); err != nil {
 		return false, err
 	}
 	return exists, nil

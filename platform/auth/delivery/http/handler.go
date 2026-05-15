@@ -6,113 +6,198 @@ import (
 
 	"github.com/AgileFactory/kernel/kernel/errors"
 	"github.com/AgileFactory/kernel/kernel/response"
+	"github.com/AgileFactory/kernel/platform/auth/domain"
 	"github.com/AgileFactory/kernel/platform/auth/usecase"
 	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
 	memberusecase "github.com/AgileFactory/kernel/platform/membership/usecase"
-	"github.com/google/uuid"
 )
 
-// AuthHandler handles HTTP requests for authentication.
+// AuthHandler wires the auth use cases to HTTP endpoints.
 type AuthHandler struct {
-	registerUC *usecase.RegisterUseCase
-	loginUC    *usecase.LoginUseCase
-	listUC     *memberusecase.ListMembersUseCase
+	signupOwnerUC  *usecase.SignupOwnerUseCase
+	acceptInviteUC *usecase.AcceptInviteUseCase
+	verifyEmailUC  *usecase.VerifyEmailUseCase
+	loginUC        *usecase.LoginUseCase
+	refreshUC      *usecase.RefreshTokenUseCase
+	logoutUC       *usecase.LogoutUseCase
+	listMembersUC  *memberusecase.ListMembersUseCase
 }
 
-// NewAuthHandler creates a new AuthHandler.
+// NewAuthHandler wires every use case the auth surface exposes.
 func NewAuthHandler(
-	registerUC *usecase.RegisterUseCase,
+	signupOwnerUC *usecase.SignupOwnerUseCase,
+	acceptInviteUC *usecase.AcceptInviteUseCase,
+	verifyEmailUC *usecase.VerifyEmailUseCase,
 	loginUC *usecase.LoginUseCase,
-	listUC *memberusecase.ListMembersUseCase,
+	refreshUC *usecase.RefreshTokenUseCase,
+	logoutUC *usecase.LogoutUseCase,
+	listMembersUC *memberusecase.ListMembersUseCase,
 ) *AuthHandler {
 	return &AuthHandler{
-		registerUC: registerUC,
-		loginUC:    loginUC,
-		listUC:     listUC,
+		signupOwnerUC:  signupOwnerUC,
+		acceptInviteUC: acceptInviteUC,
+		verifyEmailUC:  verifyEmailUC,
+		loginUC:        loginUC,
+		refreshUC:      refreshUC,
+		logoutUC:       logoutUC,
+		listMembersUC:  listMembersUC,
 	}
 }
 
-// Register handles user registration.
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	var req RegisterRequest
+// SignupOwner handles POST /api/v1/auth/signup-owner.
+func (h *AuthHandler) SignupOwner(w http.ResponseWriter, r *http.Request) {
+	var req SignupOwnerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, errors.BadRequest("Invalid request body"))
 		return
 	}
-
 	if err := req.Validate(); err != nil {
 		response.Error(w, errors.BadRequest(err.Error()))
 		return
 	}
 
-	id := uuid.New().String()
-
-	// Parse role, defaulting to ROLE_VIEWER for safety.
-	// ROLE_OWNER is accepted here but should only be used by the tenant creation flow.
-	role := memberdomain.MEMBER_ROLE_VIEWER
-	switch memberdomain.MemberRole(req.Role) {
-	case memberdomain.MEMBER_ROLE_OWNER:
-		role = memberdomain.MEMBER_ROLE_OWNER
-	case memberdomain.MEMBER_ROLE_ADMIN:
-		role = memberdomain.MEMBER_ROLE_ADMIN
-	case memberdomain.MEMBER_ROLE_AGENT:
-		role = memberdomain.MEMBER_ROLE_AGENT
-	}
-
-	user, err := h.registerUC.Execute(r.Context(), id, req.TenantID, req.Email, req.Password, role)
+	out, err := h.signupOwnerUC.Execute(r.Context(), req.TenantName, req.TenantSlug, req.Email, req.Password)
 	if err != nil {
 		response.Error(w, err)
 		return
 	}
 
-	// Fetch the memberships created during registration
-	memberships, _ := h.listUC.ByUser(r.Context(), user.ID)
-	userDTO := UserDTO{
-		ID:          user.ID,
-		Email:       user.Email.String(),
-		Role:        string(user.Role),
-		Memberships: toMembershipSummaries(memberships),
-	}
-
-	response.JSON(w, http.StatusCreated, userDTO)
+	memberships, _ := h.listMembersUC.ByUser(r.Context(), out.User.ID)
+	response.JSON(w, http.StatusCreated, SignupOwnerResponse{
+		TenantID:                 out.Tenant.ID,
+		UserID:                   out.User.ID,
+		MembershipID:             out.OwnerMembership.ID,
+		AccessToken:              out.AccessToken,
+		RefreshToken:             out.RefreshToken,
+		EmailVerificationPending: !out.User.EmailVerified,
+		User:                     toUserDTO(out.User, memberships),
+	})
 }
 
-// Login handles user login.
+// AcceptInvite handles POST /api/v1/auth/accept-invite.
+func (h *AuthHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
+	var req AcceptInviteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, errors.BadRequest("Invalid request body"))
+		return
+	}
+	if err := req.Validate(); err != nil {
+		response.Error(w, errors.BadRequest(err.Error()))
+		return
+	}
+
+	out, err := h.acceptInviteUC.Execute(r.Context(), req.Token, req.Password)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	memberships, _ := h.listMembersUC.ByUser(r.Context(), out.User.ID)
+	response.JSON(w, http.StatusOK, AcceptInviteResponse{
+		UserID:       out.User.ID,
+		MembershipID: out.Membership.ID,
+		TenantID:     out.Membership.TenantID,
+		Role:         string(out.Membership.Role),
+		AccessToken:  out.AccessToken,
+		RefreshToken: out.RefreshToken,
+		User:         toUserDTO(out.User, memberships),
+	})
+}
+
+// VerifyEmail handles POST /api/v1/auth/verify-email.
+func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	var req VerifyEmailRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, errors.BadRequest("Invalid request body"))
+		return
+	}
+	if err := req.Validate(); err != nil {
+		response.Error(w, errors.BadRequest(err.Error()))
+		return
+	}
+	if err := h.verifyEmailUC.Execute(r.Context(), req.Token); err != nil {
+		response.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Login handles POST /api/v1/auth/login.
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, errors.BadRequest("Invalid request body"))
 		return
 	}
-
 	if err := req.Validate(); err != nil {
 		response.Error(w, errors.BadRequest(err.Error()))
 		return
 	}
 
-	token, user, err := h.loginUC.Execute(r.Context(), req.Email, req.Password)
+	out, err := h.loginUC.Execute(r.Context(), req.Email, req.Password)
 	if err != nil {
 		response.Error(w, err)
 		return
 	}
 
-	// Fetch the user's current memberships for the response
-	memberships, _ := h.listUC.ByUser(r.Context(), user.ID)
-
-	resp := AuthResponse{
-		Token: token,
-		User: UserDTO{
-			ID:          user.ID,
-			Email:       user.Email.String(),
-			Role:        string(user.Role),
-			Memberships: toMembershipSummaries(memberships),
-		},
-	}
-
-	response.JSON(w, http.StatusOK, resp)
+	memberships, _ := h.listMembersUC.ByUser(r.Context(), out.User.ID)
+	response.JSON(w, http.StatusOK, LoginResponse{
+		AccessToken:  out.AccessToken,
+		RefreshToken: out.RefreshToken,
+		User:         toUserDTO(out.User, memberships),
+	})
 }
 
-// toMembershipSummaries converts domain memberships to compact DTO slices.
+// Refresh handles POST /api/v1/auth/refresh.
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, errors.BadRequest("Invalid request body"))
+		return
+	}
+	if err := req.Validate(); err != nil {
+		response.Error(w, errors.BadRequest(err.Error()))
+		return
+	}
+
+	out, err := h.refreshUC.Execute(r.Context(), req.RefreshToken)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, RefreshResponse{
+		AccessToken:  out.AccessToken,
+		RefreshToken: out.RefreshToken,
+	})
+}
+
+// Logout handles POST /api/v1/auth/logout. Idempotent.
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req LogoutRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Empty body is allowed — treat as a no-op.
+		req = LogoutRequest{}
+	}
+	if err := h.logoutUC.Execute(r.Context(), req.RefreshToken); err != nil {
+		response.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// toUserDTO converts the domain User + the user's memberships into the wire
+// shape returned by the auth endpoints.
+func toUserDTO(user *domain.User, memberships []*memberdomain.Membership) UserDTO {
+	return UserDTO{
+		ID:            user.ID,
+		Email:         user.Email.String(),
+		Role:          string(user.Role),
+		EmailVerified: user.EmailVerified,
+		Status:        string(user.Status),
+		Memberships:   toMembershipSummaries(memberships),
+	}
+}
+
 func toMembershipSummaries(memberships []*memberdomain.Membership) []MembershipSummary {
 	result := make([]MembershipSummary, len(memberships))
 	for i, m := range memberships {

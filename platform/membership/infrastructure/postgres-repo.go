@@ -3,9 +3,9 @@ package infrastructure
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
+	"github.com/AgileFactory/kernel/kernel/txctx"
 	"github.com/AgileFactory/kernel/platform/membership/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -15,9 +15,10 @@ import (
 // pgUniqueViolation is the SQLSTATE code Postgres returns on UNIQUE conflict.
 const pgUniqueViolation = "23505"
 
-// PostgresMembershipRepository implements domain.MembershipRepository using pgxpool.
+// PostgresMembershipRepository implements domain.MembershipRepository using
+// pgxpool. All operations honour an in-context pgx.Tx via txctx.DB so the
+// repo enlists in an outer transaction (e.g. SignupOwner) when one is set.
 type PostgresMembershipRepository struct {
-	mu sync.RWMutex
 	db *pgxpool.Pool
 }
 
@@ -28,15 +29,12 @@ func NewPostgresMembershipRepository(db *pgxpool.Pool) *PostgresMembershipReposi
 
 // Save persists a new membership row.
 func (r *PostgresMembershipRepository) Save(ctx context.Context, m *domain.Membership) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	var invitedBy interface{}
 	if m.InvitedBy != "" {
 		invitedBy = m.InvitedBy
 	}
 
-	_, err := r.db.Exec(ctx, queryInsertMembership,
+	_, err := txctx.DB(ctx, r.db).Exec(ctx, queryInsertMembership,
 		m.ID,
 		m.UserID,
 		m.TenantID,
@@ -58,42 +56,27 @@ func (r *PostgresMembershipRepository) Save(ctx context.Context, m *domain.Membe
 
 // FindByID retrieves a membership by its UUID.
 func (r *PostgresMembershipRepository) FindByID(ctx context.Context, id string) (*domain.Membership, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return r.scanOne(r.db.QueryRow(ctx, queryGetMembershipByID, id))
+	return r.scanOne(txctx.DB(ctx, r.db).QueryRow(ctx, queryGetMembershipByID, id))
 }
 
 // FindByUserAndTenant retrieves the unique membership for a user/tenant pair.
 func (r *PostgresMembershipRepository) FindByUserAndTenant(ctx context.Context, userID, tenantID string) (*domain.Membership, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return r.scanOne(r.db.QueryRow(ctx, queryGetMembershipByUserAndTenant, userID, tenantID))
+	return r.scanOne(txctx.DB(ctx, r.db).QueryRow(ctx, queryGetMembershipByUserAndTenant, userID, tenantID))
 }
 
 // ListByTenant returns all memberships for a tenant.
 func (r *PostgresMembershipRepository) ListByTenant(ctx context.Context, tenantID string) ([]*domain.Membership, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	return r.scanMany(ctx, queryListMembershipsByTenant, tenantID)
 }
 
 // ListByUser returns all memberships a user holds across tenants.
 func (r *PostgresMembershipRepository) ListByUser(ctx context.Context, userID string) ([]*domain.Membership, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	return r.scanMany(ctx, queryListMembershipsByUser, userID)
 }
 
 // UpdateStatus persists a status and optional joined_at change.
 func (r *PostgresMembershipRepository) UpdateStatus(ctx context.Context, id string, status domain.MemberStatus, joinedAt *time.Time) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	_, err := r.db.Exec(ctx, queryUpdateMembershipStatus, id, string(status), joinedAt)
+	_, err := txctx.DB(ctx, r.db).Exec(ctx, queryUpdateMembershipStatus, id, string(status), joinedAt)
 	return err
 }
 
@@ -111,7 +94,7 @@ func (r *PostgresMembershipRepository) scanOne(row pgx.Row) (*domain.Membership,
 }
 
 func (r *PostgresMembershipRepository) scanMany(ctx context.Context, query string, arg string) ([]*domain.Membership, error) {
-	rows, err := r.db.Query(ctx, query, arg)
+	rows, err := txctx.DB(ctx, r.db).Query(ctx, query, arg)
 	if err != nil {
 		return nil, err
 	}

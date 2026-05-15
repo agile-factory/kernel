@@ -94,6 +94,9 @@ func main() {
 	tenantRepo := tenantinfra.NewPostgresTenantRepository(db)
 	memberRepo := memberinfra.NewPostgresMembershipRepository(db)
 	userRepo := authinfra.NewPostgresUserRepository(db)
+	refreshTokenRepo := authinfra.NewPostgresRefreshTokenRepository(db)
+	emailVerifRepo := authinfra.NewPostgresEmailVerificationTokenRepository(db)
+	inviteTokenRepo := memberinfra.NewPostgresInviteTokenRepository(db)
 
 	// ── Modules ──────────────────────────────────────────────────────────────
 	// The audit Module currently uses best-effort direct injection (ADR-0009
@@ -120,17 +123,20 @@ func main() {
 	})
 
 	authMod := auth.New(auth.Config{
+		Pool:             db,
 		UserRepo:         userRepo,
 		TenantRepo:       tenantRepo,
 		MembershipRepo:   memberRepo,
+		InviteTokenRepo:  inviteTokenRepo,
+		RefreshTokenRepo: refreshTokenRepo,
+		EmailVerifRepo:   emailVerifRepo,
 		MembershipListUC: memberMod.ListUC,
 		AuditLogger:      auditMod.EventLogger(),
+		Publisher:        bus.Publisher(),
 		Logger:           log,
 		JWTSecret:        cfg.JWTSecret,
 		TokenLifespan:    cfg.TokenLifespan,
 	})
-
-	_ = bus.Publisher() // silence unused until consumers wire it in P1-3
 
 	// ── HTTP wiring ──────────────────────────────────────────────────────────
 	mux := http.NewServeMux()

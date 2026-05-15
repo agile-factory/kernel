@@ -30,4 +30,20 @@ var (
 
 	// ErrCannotRevokeOwnMembership is returned when an admin tries to revoke themselves.
 	ErrCannotRevokeOwnMembership = errors.BadRequest("You cannot revoke your own membership")
+
+	// ErrInviteTokenNotFound is returned for an unknown invite token.
+	ErrInviteTokenNotFound = errors.NotFound("Invite token not found")
+
+	// ErrInviteTokenExpired is returned when the invite is past expires_at.
+	ErrInviteTokenExpired = errors.BadRequest("Invite token has expired")
+
+	// ErrInviteTokenAlreadyConsumed is returned on replay of a redeemed invite.
+	ErrInviteTokenAlreadyConsumed = errors.Conflict("Invite token has already been used")
+
+	// ErrInviteTokenRevoked is returned when an admin has revoked the invite.
+	ErrInviteTokenRevoked = errors.Forbidden("Invite token has been revoked")
+
+	// ErrInviteEmailMismatch is returned when the redeeming caller's email does
+	// not match the email the invite was issued to.
+	ErrInviteEmailMismatch = errors.Forbidden("This invite was issued for a different email address")
 )
