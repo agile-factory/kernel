@@ -182,6 +182,7 @@ kernel/
 │   ├── migrator/               # golang-migrate + iofs (par-package via embed.FS)
 │   ├── response/               # JSON HTTP helpers
 │   ├── server/                 # HTTP server bootstrap + graceful shutdown
+│   ├── storage/                # Port abstrait object-storage (interface Storage)
 │   ├── txctx/                  # Transaction propagation via context (DBTX + ExecInTx)
 │   └── validator/              # Email, UUID, etc.
 ├── platform/                   # Briques SaaS réutilisables
@@ -189,6 +190,7 @@ kernel/
 │   ├── auth/                   # ✅ SignupOwner/AcceptInvite/Verify/Login/Refresh/Logout (RFC-0007 + 0018)
 │   ├── membership/             # ✅ Invite via invite_tokens + revoke + list (RFC-0004 + 0018)
 │   ├── tenant/                 # ✅ Tenant + tenant_settings + admin endpoints (RFC-0008 + 0018)
+│   ├── storage/                # ✅ Port + backend S3 via minio-go (R2/MinIO/AWS/B2) — RFC-0017
 │   ├── billing/                # ⏳ P1 (RFC-0020)
 │   ├── notification/           # ⏳ P1 (RFC-0019)
 │   ├── permission/             # ⏳ P1 (RFC-0010)
@@ -265,6 +267,7 @@ Conventions enforced par `scripts/lint.sh` en CI : pas d'`init()`, pas d'`os.Get
 | [RFC-0007](docs/architecture/rfcs/0007-Platform-Auth-Authentification.md) | Platform Auth *(sections onboarding supersédées par RFC-0018)* | ACCEPTED |
 | [RFC-0008](docs/architecture/rfcs/0008-Platform-Tenant-Organisations.md) | Platform Tenant *(création publique supersédée par RFC-0018)* | ACCEPTED |
 | [RFC-0015](docs/architecture/rfcs/0015-Event-Bus-Interne.md) | Event Bus + Outbox (v1.1) | PROPOSED + IMPL outbox P0-8 |
+| [RFC-0017](docs/architecture/rfcs/0017-Platform-Object-Storage.md) | Platform Object Storage — Port + S3 backend | ACCEPTED + IMPL v0.1.0 partial (presign en v2) |
 | **[RFC-0018](docs/architecture/rfcs/0018-Amendements-B2B-Onboarding.md)** | **Amendements B2B Onboarding** — signup-owner, accept-invite, refresh tokens | ACCEPTED + IMPL P0-10 |
 | **[RFC-0038](docs/architecture/rfcs/0038-Conventions-Package-Reutilisable.md)** | **Conventions de Package Réutilisable** — Module/Config/Migrations | ACCEPTED + IMPL P0-0 |
 
@@ -374,7 +377,7 @@ Le workflow [`wiki-sync.yml`](.github/workflows/wiki-sync.yml) mirroite `docs/` 
 | **Tous** | [RFCs](docs/architecture/rfcs/) + [ADRs](docs/architecture/adrs/) | Source de vérité des décisions architecturales — voir tableau plus haut. |
 
 Chaque module livré porte son propre README détaillé :
-[`platform/audit/`](platform/audit/README.md) · [`platform/auth/`](platform/auth/README.md) · [`platform/membership/`](platform/membership/README.md) · [`platform/tenant/`](platform/tenant/README.md) · [`platform/notification/`](platform/notification/README.md)
+[`platform/audit/`](platform/audit/README.md) · [`platform/auth/`](platform/auth/README.md) · [`platform/membership/`](platform/membership/README.md) · [`platform/tenant/`](platform/tenant/README.md) · [`platform/storage/`](platform/storage/README.md) · [`platform/notification/`](platform/notification/README.md)
 
 ---
 

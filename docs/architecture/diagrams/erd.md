@@ -27,15 +27,15 @@ erDiagram
     }
 
     tenant_settings {
-        uuid tenant_id PK_FK
+        uuid tenant_id PK, FK
         text logo_url
         varchar primary_color
         varchar locale
         varchar timezone
         varchar currency
-        varchar data_region "eu/us/apac"
-        varchar custom_domain UK_partial
-        varchar payment_region "INTERNATIONAL/CEDEAO"
+        varchar data_region "eu, us or apac"
+        varchar custom_domain UK "partial unique"
+        varchar payment_region "INTERNATIONAL or CEDEAO"
         bool merchant_mode
         bool b2b2c_enabled
     }
@@ -44,7 +44,7 @@ erDiagram
         uuid id PK
         varchar email UK
         text password "bcrypt hash"
-        user_role role "ROLE_ADMIN/AGENT/VIEWER"
+        user_role role "ADMIN, AGENT or VIEWER"
         timestamptz email_verified_at
         timestamptz created_at
         timestamptz updated_at
@@ -54,9 +54,9 @@ erDiagram
         uuid id PK
         uuid user_id FK
         uuid tenant_id FK
-        member_role role "OWNER/ADMIN/AGENT/VIEWER"
-        member_status status "PENDING/ACTIVE/REVOKED"
-        uuid invited_by FK_nullable
+        member_role role "OWNER, ADMIN, AGENT or VIEWER"
+        member_status status "PENDING, ACTIVE or REVOKED"
+        uuid invited_by FK "nullable"
         timestamptz joined_at
         timestamptz created_at
         timestamptz updated_at
@@ -65,7 +65,7 @@ erDiagram
     refresh_tokens {
         uuid id PK
         uuid user_id FK
-        uuid tenant_id FK_nullable "scopé au signup/invite, null au login"
+        uuid tenant_id FK "nullable - signup or invite scopes it, login does not"
         char token_hash UK "SHA-256 hex"
         timestamptz expires_at "default NOW+30d"
         timestamptz revoked_at
@@ -96,9 +96,9 @@ erDiagram
 
     audit_logs {
         uuid id PK
-        uuid tenant_id FK_nullable
-        uuid actor_id FK_nullable
-        audit_action action "USER_REGISTERED/MEMBER_INVITED/..."
+        uuid tenant_id FK "nullable - SET NULL on tenant delete"
+        uuid actor_id FK "nullable - SET NULL on user delete"
+        audit_action action "USER_REGISTERED, MEMBER_INVITED, etc."
         varchar target_type
         uuid target_id
         jsonb metadata
@@ -107,12 +107,12 @@ erDiagram
 
     notification_logs {
         uuid id PK
-        uuid tenant_id_nullable
-        uuid recipient_id_nullable
+        uuid tenant_id "nullable"
+        uuid recipient_id "nullable"
         varchar event_type
         varchar channel "EMAIL"
-        varchar status "PENDING/SENT/FAILED"
-        varchar external_id "ID retourné par EmailSender"
+        varchar status "PENDING, SENT or FAILED"
+        varchar external_id "id returned by EmailSender"
         text error_message
         jsonb metadata
         timestamptz created_at
@@ -125,7 +125,7 @@ erDiagram
         jsonb payload
         jsonb meta
         timestamptz created_at
-        timestamptz published_at "NULL = pas encore traité"
+        timestamptz published_at "NULL means not yet dispatched"
         int attempts
         timestamptz next_attempt_at
         text last_error

@@ -4,7 +4,7 @@
 
 ---
 
-## **Status:** `DRAFT`
+## **Status:** `ACCEPTED + IMPL v0.1.0 partial` (S3 backend via minio-go ciblé Cloudflare R2 ; presigned URLs reportés en v2 — cf. `platform/storage/README.md`)
 
 ---
 
