@@ -1,0 +1,394 @@
+[
+  {
+    "key": "milestone-v010",
+    "category": "milestone",
+    "title": "[Milestone] v0.1.0 — Fondations B2B (P0)",
+    "body": "Premier tag livrable. Surface livrée : auth (signup-owner, accept-invite, verify-email, login/refresh/logout), tenant + tenant_settings, membership invite/revoke/list via invite_tokens, audit trail v1+v2 cursor, outbox transactionnel, storage S3 (R2/MinIO), CI verte (build/vet/test/staticcheck/lint-conventions/lint-migrations) + wiki-sync auto.\n\n**Doc** : voir [README.md § Roadmap](https://github.com/AgileFactory/kernel/blob/main/README.md) et [plan.txt](https://github.com/AgileFactory/kernel/blob/main/docs/plan.txt).\n\n**Suffit pour** : MVP SaaS B2B simple.",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:milestone", "roadmap:v0.1.0"]
+  },
+  {
+    "key": "milestone-v020",
+    "category": "milestone",
+    "title": "[Milestone] v0.2.0 — Plateformes B2B core + Enterprise (P1)",
+    "body": "Phase 2 + 3 du plan : billing (Stripe + Mobile Money), notification finalisée, permission (RBAC granulaire), user (profil minimal), SSO enterprise (OIDC + JWKS RS256), observability (Prometheus + OpenTelemetry).\n\n**Suffit pour** : SaaS B2B enterprise-ready (ventes à des organisations exigeant SSO + auditabilité SOC2).",
+    "status": "todo",
+    "start_date": "2026-05-17",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:milestone", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "milestone-v030",
+    "category": "milestone",
+    "title": "[Milestone] v0.3.0 — B2B2C (P1bis)",
+    "body": "Phase 4 du plan : end_customers, customer_auth (avec OTP SMS CEDEAO), customer_billing (Merchant Mode Stripe Connect + Mobile Money marchand), customer_notifications (multi-canal large), white_label (custom domains + branding), mux `/customer/v1/*`, RLS PostgreSQL en defense-in-depth.\n\n**Suffit pour** : produit B2B2C complet (agence immo → locataires, clinique → patients, etc.).",
+    "status": "todo",
+    "start_date": "2026-07-14",
+    "target_date": "2026-08-17",
+    "labels": ["roadmap:milestone", "roadmap:v0.3.0"]
+  },
+  {
+    "key": "milestone-v100",
+    "category": "milestone",
+    "title": "[Milestone] v1.0.0 — Stabilisation contrats publics",
+    "body": "Stabilisation des contrats publics après retour des premiers SaaS consommateurs (~2 mois post-v0.3.0). Aucun changement breaking après v1.0 sans bump majeur.\n\nPotentiellement inclut BaaS (P2) si la demande client est là — terrain déjà préparé en P0/P1 (middleware pluggable, outbox réutilisable, packages squelettes).",
+    "status": "todo",
+    "start_date": "2026-08-18",
+    "target_date": "2026-10-15",
+    "labels": ["roadmap:milestone", "roadmap:v1.0.0"]
+  },
+
+  {
+    "key": "adr-0001",
+    "category": "adr",
+    "title": "[ADR-0001] Go Stdlib HTTP Router",
+    "body": "Décision : router HTTP via `net/http` stdlib (Go 1.22+ routing) — pas de chi/gorilla/echo.\n\n**Statut** : ACCEPTED\n**Source** : [docs/architecture/adrs/0001-Go-Stdlib-HTTP-Router.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0001-Go-Stdlib-HTTP-Router.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0002",
+    "category": "adr",
+    "title": "[ADR-0002] Clean Architecture 3 Niveaux",
+    "body": "Décision : layering domain / usecase / infrastructure + delivery dans chaque module.\n\n**Statut** : ACCEPTED\n**Source** : [docs/architecture/adrs/0002-Clean-Architecture-Trois-Niveaux.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0002-Clean-Architecture-Trois-Niveaux.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0003",
+    "category": "adr",
+    "title": "[ADR-0003] Multi-Tenancy Shared Schema",
+    "body": "Décision : shared-schema avec isolation par `tenant_id` dans chaque table sensible. Pas de schéma par tenant, pas de DB par tenant.\n\n**Statut** : IMPLEMENTED\n**Source** : [docs/architecture/adrs/0003-Multi-Tenancy-Shared-Schema-Memberships.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0003-Multi-Tenancy-Shared-Schema-Memberships.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0004",
+    "category": "adr",
+    "title": "[ADR-0004] Gestion d'erreurs AppError",
+    "body": "Décision : `kernel/errors` central avec `*AppError` + codes SCREAMING_SNAKE_CASE + stack trace + `slog.LogValuer`.\n\n**Statut** : IMPLEMENTED\n**Source** : [docs/architecture/adrs/0004-Gestion-Erreurs-AppError.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0004-Gestion-Erreurs-AppError.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0005",
+    "category": "adr",
+    "title": "[ADR-0005] Logging Fan-Out slog",
+    "body": "Décision : fan-out stdout + app.log + error.log + server.log via `log/slog`. Rotation externe (logrotate).\n\n**Statut** : IMPLEMENTED\n**Source** : [docs/architecture/adrs/0005-Logging-Fan-Out-Slog.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0005-Logging-Fan-Out-Slog.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0006",
+    "category": "adr",
+    "title": "[ADR-0006] Migrations SQL golang-migrate",
+    "body": "Décision : golang-migrate + iofs + `embed.FS` par-package, tables de version séparées (`schema_migrations_<feature>`).\n\n**Statut** : IMPLEMENTED\n**Source** : [docs/architecture/adrs/0006-Migrations-SQL-Golang-Migrate.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0006-Migrations-SQL-Golang-Migrate.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0007",
+    "category": "adr",
+    "title": "[ADR-0007] JWT HS256 Stdlib",
+    "body": "Décision : JWT HS256 via stdlib pour v0.1. Migration vers RS256 + JWKS planifiée en P1 (RFC-0028).\n\n**Statut** : IMPLEMENTED\n**Source** : [docs/architecture/adrs/0007-JWT-HS256-Stdlib.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0007-JWT-HS256-Stdlib.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0008",
+    "category": "adr",
+    "title": "[ADR-0008] Injection de dépendances manuelle",
+    "body": "Décision : pas de wire/fx/dig — composition manuelle dans `main.go` du consommateur.\n\n**Statut** : ACCEPTED\n**Source** : [docs/architecture/adrs/0008-Injection-Dependances-Manuelle.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0008-Injection-Dependances-Manuelle.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0009",
+    "category": "adr",
+    "title": "[ADR-0009] Audit Best-Effort (DEPRECATED en P1-3)",
+    "body": "Décision : audit fire-and-forget (goroutine détachée, `context.WithoutCancel`). À DEPRECATED dès P1-3 (migration vers outbox at-least-once).\n\n**Statut** : IMPLEMENTED, DEPRECATED en P1-3\n**Source** : [docs/architecture/adrs/0009-Audit-Best-Effort-Platform.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0009-Audit-Best-Effort-Platform.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+  {
+    "key": "adr-0010",
+    "category": "adr",
+    "title": "[ADR-0010] Pagination uniforme data + total",
+    "body": "Décision : enveloppe `{data, total, limit, offset}` pour v1 ; cursor pour v2 avec `total=-1`.\n\n**Statut** : ACCEPTED\n**Source** : [docs/architecture/adrs/0010-Pagination-Uniforme-Data-Total.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/adrs/0010-Pagination-Uniforme-Data-Total.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:adr"]
+  },
+
+  {
+    "key": "rfc-0002",
+    "category": "rfc",
+    "title": "[RFC-0002] Architecture & Stack Technique",
+    "body": "Vision globale : Go 1.25 + PostgreSQL 16 + Clean Architecture + multi-tenancy shared-schema + JWT.\n\n**Statut** : PROPOSED\n**Source** : [rfcs/0002-Create-Boilerplate-for-Agile-Factory.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0002-Create-Boilerplate-for-Agile-Factory.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0003",
+    "category": "rfc",
+    "title": "[RFC-0003] Description Multi-Tenant Use Case",
+    "body": "Use case multi-tenancy initial — détails dans ADR-0003 + RFC-0008.\n\n**Statut** : ACCEPTED\n**Source** : [rfcs/0003-Description-For-Multi-Tenant-Use-Case](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0003-Description-For-Multi-Tenant-Use-Case)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0004",
+    "category": "rfc",
+    "title": "[RFC-0004] Platform Membership Lifecycle",
+    "body": "Cycle de vie membership : PENDING → ACTIVE → REVOKED. Rôles OWNER/ADMIN/AGENT/VIEWER. Invitation token-based (amendée par RFC-0018 §6).\n\n**Statut** : ACCEPTED + IMPL\n**Source** : [rfcs/0004-Platform-Membership-Lifecycle.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0004-Platform-Membership-Lifecycle.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0005",
+    "category": "rfc",
+    "title": "[RFC-0005] Platform Audit Trail",
+    "body": "Trace immuable des actions significatives. v1 offset + v2 cursor. Best-effort (ADR-0009) → outbox at-least-once en P1-3.\n\n**Statut** : ACCEPTED + IMPL v2 cursor\n**Source** : [rfcs/0005-Platform-Audit-Trail.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0005-Platform-Audit-Trail.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0006",
+    "category": "rfc",
+    "title": "[RFC-0006] Stratégie Pagination APIs",
+    "body": "v1 offset + total ; v2 cursor (total=-1, has_more, next_cursor). Index keyset sur `(tenant_id, occurred_at DESC, id DESC)`.\n\n**Statut** : ACCEPTED + IMPL v2\n**Source** : [rfcs/0006-Strategie-Pagination-APIs.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0006-Strategie-Pagination-APIs.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0007",
+    "category": "rfc",
+    "title": "[RFC-0007] Platform Auth — Authentification",
+    "body": "Login/refresh/logout JWT HS256 + bcrypt + rolling refresh-token rotation. Sections onboarding supersédées par RFC-0018.\n\n**Statut** : ACCEPTED + IMPL\n**Source** : [rfcs/0007-Platform-Auth-Authentification.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0007-Platform-Auth-Authentification.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0008",
+    "category": "rfc",
+    "title": "[RFC-0008] Platform Tenant — Organisations",
+    "body": "Tenant + tenant_settings (1:1) + admin endpoints. Création publique supersédée par RFC-0018 §3 + §9.\n\n**Statut** : ACCEPTED + IMPL\n**Source** : [rfcs/0008-Platform-Tenant-Organisations.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0008-Platform-Tenant-Organisations.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0009",
+    "category": "rfc",
+    "title": "[RFC-0009] Platform User — Profils",
+    "body": "Profil utilisateur minimal (avatar, locale, timezone, preferences). Distinct du `users` core qui ne porte que auth.\n\n**Statut** : ACCEPTED — implémentation P1\n**Source** : [rfcs/0009-Platform-User-Profils.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0009-Platform-User-Profils.md)",
+    "status": "todo",
+    "start_date": "2026-05-17",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0010",
+    "category": "rfc",
+    "title": "[RFC-0010] Platform Permission — RBAC granulaire",
+    "body": "Permissions fine-grained par module (au-delà des rôles OWNER/ADMIN/AGENT/VIEWER). Mapping role → permissions configurable par tenant.\n\n**Statut** : ACCEPTED — implémentation P1\n**Source** : [rfcs/0010-Platform-Permission-RBAC.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0010-Platform-Permission-RBAC.md)",
+    "status": "todo",
+    "start_date": "2026-05-17",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0013",
+    "category": "rfc",
+    "title": "[RFC-0013] Format Identifiants UUID",
+    "body": "UUIDs partout (v4 ou v7 selon besoin de tri temporel). gen_random_uuid() côté DB via pgcrypto.\n\n**Statut** : ACCEPTED + IMPL implicite\n**Source** : [rfcs/0013-Format-Identifiants-UUID.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0013-Format-Identifiants-UUID.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0014",
+    "category": "rfc",
+    "title": "[RFC-0014] Versioning API HTTP",
+    "body": "`/api/v1/*` interne, `/api/v2/*` pour breaking changes ; `/public/v1/*` réservé pour BaaS futur (calendar versioning). Amendée pour cadrer la séparation logique.\n\n**Statut** : ACCEPTED — refinement P1\n**Source** : [rfcs/0014-Versioning-API-HTTP.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0014-Versioning-API-HTTP.md)",
+    "status": "todo",
+    "start_date": "2026-05-17",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0015",
+    "category": "rfc",
+    "title": "[RFC-0015] Event Bus Interne — Outbox transactionnel",
+    "body": "Outbox PostgreSQL at-least-once, single-writer via `pg_try_advisory_lock`, backoff exponentiel. v1.1 livré P0-8.\n\n**Statut** : PROPOSED + IMPL outbox P0-8\n**Source** : [rfcs/0015-Event-Bus-Interne.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0015-Event-Bus-Interne.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0016",
+    "category": "rfc",
+    "title": "[RFC-0016] Observabilité — Métriques & Traces",
+    "body": "Prometheus pour métriques + OpenTelemetry pour traces distribuées. `kernel/metrics/` + `kernel/tracing/` en P1-10.\n\n**Statut** : ACCEPTED — implémentation P1\n**Source** : [rfcs/0016-Observabilite-Metriques-Traces.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0016-Observabilite-Metriques-Traces.md)",
+    "status": "todo",
+    "start_date": "2026-05-17",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0017",
+    "category": "rfc",
+    "title": "[RFC-0017] Platform Object Storage — Port + S3 backend",
+    "body": "Port `kernel/storage` + backend S3 via minio-go (Cloudflare R2 en prod, MinIO en self-hosted plus tard). URLs présignées en v2.\n\n**Statut** : ACCEPTED + IMPL v0.1.0 partial\n**Source** : [rfcs/0017-Platform-Object-Storage.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0017-Platform-Object-Storage.md)\n**Module** : [platform/storage/](https://github.com/AgileFactory/kernel/tree/main/platform/storage)",
+    "status": "done",
+    "start_date": "2026-05-16",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0018",
+    "category": "rfc",
+    "title": "[RFC-0018] Amendements B2B Onboarding",
+    "body": "signup-owner + accept-invite + verify-email + refresh tokens hashés + rolling rotation. Supersède sections onboarding RFC-0007/0008.\n\n**Statut** : ACCEPTED + IMPL P0-10\n**Source** : [rfcs/0018-Amendements-B2B-Onboarding.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0018-Amendements-B2B-Onboarding.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  },
+  {
+    "key": "rfc-0019",
+    "category": "rfc",
+    "title": "[RFC-0019] Platform Notification — B2B Email-First",
+    "body": "Subscribe outbox + render templates par locale + EmailSender pluggable. Handlers signup_owner + member_invited livrés ; invite_accepted stub.\n\n**Statut** : ACCEPTED + IMPL v0.1.0 partial — finalisation P1-1\n**Source** : [rfcs/0019-Platform-Notification-B2B-Email-First.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0019-Platform-Notification-B2B-Email-First.md)\n**Module** : [platform/notification/](https://github.com/AgileFactory/kernel/tree/main/platform/notification)",
+    "status": "in_progress",
+    "start_date": "2026-05-12",
+    "target_date": "2026-06-15",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0020",
+    "category": "rfc",
+    "title": "[RFC-0020] Platform Billing — Hybride Stripe + Mobile Money",
+    "body": "Stripe (international) + Wave / Orange Money / Free Money (CEDEAO) via adapters PaymentProcessor. Merchant Mode B2B2C en P1bis-8.\n\n**Statut** : ACCEPTED — implémentation P1-2 + P1bis-8\n**Source** : [rfcs/0020-Platform-Billing-Hybride-Merchant-Mode.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0020-Platform-Billing-Hybride-Merchant-Mode.md)",
+    "status": "todo",
+    "start_date": "2026-05-17",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0021",
+    "category": "rfc",
+    "title": "[RFC-0021] Platform SSO — OIDC + SAML Enterprise",
+    "body": "SSO OIDC (Okta/Azure AD/Google Workspace) + SAML v1.1. Va de pair avec RFC-0028 (RS256+JWKS).\n\n**Statut** : ACCEPTED — implémentation P1-7\n**Source** : [rfcs/0021-Platform-SSO-Enterprise.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0021-Platform-SSO-Enterprise.md)",
+    "status": "todo",
+    "start_date": "2026-06-15",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0022",
+    "category": "rfc",
+    "title": "[RFC-0022] Platform APIKey + PAT Scopés (DEFERRED P2+)",
+    "body": "API Keys `pk_live_xxxx` / `pk_test_xxxx`, hash bcrypt, scopes alignés RBAC, rotation, expiration. Profil BaaS.\n\n**Statut** : DRAFT DEFERRED P2+ — README only sous platform/apikey/\n**Source** : [rfcs/0022-Platform-APIKey-PAT-Scopes.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0022-Platform-APIKey-PAT-Scopes.md)",
+    "status": "deferred",
+    "start_date": null,
+    "target_date": null,
+    "labels": ["roadmap:rfc", "roadmap:deferred"]
+  },
+  {
+    "key": "rfc-0023",
+    "category": "rfc",
+    "title": "[RFC-0023] Platform Webhooks Sortants Signés (DEFERRED P2+)",
+    "body": "Webhooks signés HMAC + retry exponential backoff + DLQ + replay. Consomme l'outbox (RFC-0015).\n\n**Statut** : DRAFT DEFERRED P2+ — README only sous platform/webhooks_out/\n**Source** : [rfcs/0023-Platform-Webhooks-Sortants-Signes.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0023-Platform-Webhooks-Sortants-Signes.md)",
+    "status": "deferred",
+    "start_date": null,
+    "target_date": null,
+    "labels": ["roadmap:rfc", "roadmap:deferred"]
+  },
+  {
+    "key": "rfc-0024",
+    "category": "rfc",
+    "title": "[RFC-0024] Kernel Rate Limiting (partial P1)",
+    "body": "Rate limiting abstrait `kernel/ratelimit/` — utilisé en P1-6 pour `/customer/v1/auth/*` (brute-force B2B2C) puis extended pour BaaS en P2.\n\n**Statut** : ACCEPTED — implémentation partielle P1-6\n**Source** : [rfcs/0024-Kernel-Rate-Limiting.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0024-Kernel-Rate-Limiting.md)",
+    "status": "todo",
+    "start_date": "2026-05-17",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0025",
+    "category": "rfc",
+    "title": "[RFC-0025] Surface Publique BaaS — Versioning (DEFERRED P2+)",
+    "body": "`/public/v1/*` calendar-versioned à la Stripe (`X-API-Version: 2026-05-12`). Différé en P2+.\n\n**Statut** : DRAFT DEFERRED P2+ — README only sous platform/devportal/\n**Source** : [rfcs/0025-Surface-Publique-BaaS-Versioning.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0025-Surface-Publique-BaaS-Versioning.md)",
+    "status": "deferred",
+    "start_date": null,
+    "target_date": null,
+    "labels": ["roadmap:rfc", "roadmap:deferred"]
+  },
+  {
+    "key": "rfc-0026",
+    "category": "rfc",
+    "title": "[RFC-0026] Platform Usage Metering (DEFERRED P2+)",
+    "body": "Compteurs d'usage par tenant pour facturation usage-based + quotas. Profil BaaS.\n\n**Statut** : DRAFT DEFERRED P2+ — README only sous platform/usage_metering/\n**Source** : [rfcs/0026-Platform-Usage-Metering.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0026-Platform-Usage-Metering.md)",
+    "status": "deferred",
+    "start_date": null,
+    "target_date": null,
+    "labels": ["roadmap:rfc", "roadmap:deferred"]
+  },
+  {
+    "key": "rfc-0028",
+    "category": "rfc",
+    "title": "[RFC-0028] JWT RS256 + JWKS Endpoint",
+    "body": "Migration JWT HS256 → RS256 avec endpoint JWKS pour SSO/Enterprise (validation locale par les clients).\n\n**Statut** : ACCEPTED — implémentation P1-7 (avec SSO)\n**Source** : [rfcs/0028-JWT-RS256-JWKS.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0028-JWT-RS256-JWKS.md)",
+    "status": "todo",
+    "start_date": "2026-06-15",
+    "target_date": "2026-07-13",
+    "labels": ["roadmap:rfc", "roadmap:v0.2.0"]
+  },
+  {
+    "key": "rfc-0038",
+    "category": "rfc",
+    "title": "[RFC-0038] Conventions de Package Réutilisable",
+    "body": "Module/Config/Migrations par-package, no init(), no os.Getenv hors kernel/config, no internal/. Enforced par scripts/lint.sh.\n\n**Statut** : ACCEPTED + IMPL P0-0\n**Source** : [rfcs/0038-Conventions-Package-Reutilisable.md](https://github.com/AgileFactory/kernel/blob/main/docs/architecture/rfcs/0038-Conventions-Package-Reutilisable.md)",
+    "status": "done",
+    "start_date": "2026-05-12",
+    "target_date": "2026-05-16",
+    "labels": ["roadmap:rfc"]
+  }
+]
