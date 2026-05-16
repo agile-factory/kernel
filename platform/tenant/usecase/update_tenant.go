@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/platform/audit"
-	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	"github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/platform/audit"
+	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
+	"github.com/agile-factory/kernel/platform/tenant/domain"
 )
 
 // UpdateTenantUseCase renames a tenant. Slug is immutable. Permission gating

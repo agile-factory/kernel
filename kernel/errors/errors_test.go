@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/errors"
 )
 
 // ─── AppError core ──────────────────────────────────────────────────────────

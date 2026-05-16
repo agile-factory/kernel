@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/AgileFactory/kernel/platform/audit/domain"
+	"github.com/agile-factory/kernel/platform/audit/domain"
 	"github.com/google/uuid"
 )
 

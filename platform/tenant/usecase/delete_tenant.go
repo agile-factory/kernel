@@ -3,10 +3,10 @@ package usecase
 import (
 	"context"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/platform/audit"
-	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	"github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/platform/audit"
+	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
+	"github.com/agile-factory/kernel/platform/tenant/domain"
 )
 
 // DeleteTenantUseCase soft-deletes a tenant (is_active = FALSE). The row

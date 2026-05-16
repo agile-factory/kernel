@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/kernel/txctx"
-	authdomain "github.com/AgileFactory/kernel/platform/auth/domain"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/txctx"
+	authdomain "github.com/agile-factory/kernel/platform/auth/domain"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

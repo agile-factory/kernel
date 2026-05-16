@@ -3,9 +3,9 @@ package middleware
 import (
 	"net/http"
 
-	kernelauth "github.com/AgileFactory/kernel/kernel/auth"
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/kernel/response"
+	kernelauth "github.com/agile-factory/kernel/kernel/auth"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/response"
 )
 
 // TenantContext returns a middleware that extracts the active tenant ID from the

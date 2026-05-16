@@ -3,7 +3,7 @@ package usecase
 import (
 	"context"
 
-	"github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/platform/tenant/domain"
 )
 
 // GetTenantSettingsUseCase reads the tenant_settings row. Permission gating

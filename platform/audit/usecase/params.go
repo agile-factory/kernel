@@ -1,6 +1,6 @@
 package usecase
 
-import "github.com/AgileFactory/kernel/platform/audit/domain"
+import "github.com/agile-factory/kernel/platform/audit/domain"
 
 type LogEventParams struct {
 	TenantID   string

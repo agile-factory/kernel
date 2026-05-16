@@ -14,10 +14,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	audithttp "github.com/AgileFactory/kernel/platform/audit/delivery/http"
-	"github.com/AgileFactory/kernel/platform/audit/domain"
-	"github.com/AgileFactory/kernel/platform/audit/usecase"
-	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
+	audithttp "github.com/agile-factory/kernel/platform/audit/delivery/http"
+	"github.com/agile-factory/kernel/platform/audit/domain"
+	"github.com/agile-factory/kernel/platform/audit/usecase"
+	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
 )
 
 // Migrations holds the SQL files this platform owns. Consumers compose them

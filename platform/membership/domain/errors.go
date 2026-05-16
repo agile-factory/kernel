@@ -1,6 +1,6 @@
 package domain
 
-import "github.com/AgileFactory/kernel/kernel/errors"
+import "github.com/agile-factory/kernel/kernel/errors"
 
 // Sentinel errors for the Membership domain.
 var (

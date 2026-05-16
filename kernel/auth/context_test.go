@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	kernelauth "github.com/AgileFactory/kernel/kernel/auth"
+	kernelauth "github.com/agile-factory/kernel/kernel/auth"
 )
 
 // ─── UserID ───────────────────────────────────────────────────────────────────

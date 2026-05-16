@@ -18,8 +18,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	kstorage "github.com/AgileFactory/kernel/kernel/storage"
-	"github.com/AgileFactory/kernel/platform/storage/infrastructure"
+	kstorage "github.com/agile-factory/kernel/kernel/storage"
+	"github.com/agile-factory/kernel/platform/storage/infrastructure"
 )
 
 // Note: unlike other platform modules, storage does NOT export a

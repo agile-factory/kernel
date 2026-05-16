@@ -4,8 +4,8 @@ import (
 	"context"
 	stderrors "errors"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
-	authdomain "github.com/AgileFactory/kernel/platform/auth/domain"
+	"github.com/agile-factory/kernel/kernel/errors"
+	authdomain "github.com/agile-factory/kernel/platform/auth/domain"
 )
 
 // LogoutUseCase revokes the supplied refresh token. The matching access

@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/AgileFactory/kernel/kernel/txctx"
-	"github.com/AgileFactory/kernel/platform/notification/domain"
+	"github.com/agile-factory/kernel/kernel/txctx"
+	"github.com/agile-factory/kernel/platform/notification/domain"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

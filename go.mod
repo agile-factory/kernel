@@ -1,4 +1,4 @@
-module github.com/AgileFactory/kernel
+module github.com/agile-factory/kernel
 
 go 1.25.0
 

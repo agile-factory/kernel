@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strconv"
 
-	kernelauth "github.com/AgileFactory/kernel/kernel/auth"
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/kernel/response"
-	"github.com/AgileFactory/kernel/platform/membership/domain"
-	"github.com/AgileFactory/kernel/platform/membership/usecase"
+	kernelauth "github.com/agile-factory/kernel/kernel/auth"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/response"
+	"github.com/agile-factory/kernel/platform/membership/domain"
+	"github.com/agile-factory/kernel/platform/membership/usecase"
 )
 
 // MembershipHandler handles HTTP requests for membership management.

@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/kernel/response"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/response"
 )
 
 // Recovery is a middleware that recovers from panics, logs the panic, and

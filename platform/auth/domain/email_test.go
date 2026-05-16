@@ -3,7 +3,7 @@ package domain_test
 import (
 	"testing"
 
-	"github.com/AgileFactory/kernel/platform/auth/domain"
+	"github.com/agile-factory/kernel/platform/auth/domain"
 )
 
 // ─── NewEmail ────────────────────────────────────────────────────────────────

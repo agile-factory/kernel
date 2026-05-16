@@ -22,8 +22,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/AgileFactory/kernel/kernel/events"
-	notifdomain "github.com/AgileFactory/kernel/platform/notification/domain"
+	"github.com/agile-factory/kernel/kernel/events"
+	notifdomain "github.com/agile-factory/kernel/platform/notification/domain"
 	"github.com/google/uuid"
 )
 

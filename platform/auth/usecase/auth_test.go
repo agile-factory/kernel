@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	auditusecase "github.com/AgileFactory/kernel/platform/audit/usecase"
-	authdomain "github.com/AgileFactory/kernel/platform/auth/domain"
-	"github.com/AgileFactory/kernel/platform/auth/usecase"
+	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
+	auditusecase "github.com/agile-factory/kernel/platform/audit/usecase"
+	authdomain "github.com/agile-factory/kernel/platform/auth/domain"
+	"github.com/agile-factory/kernel/platform/auth/usecase"
 )
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────

@@ -9,11 +9,11 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/AgileFactory/kernel/platform/audit"
-	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
-	tenanthttp "github.com/AgileFactory/kernel/platform/tenant/delivery/http"
-	"github.com/AgileFactory/kernel/platform/tenant/domain"
-	"github.com/AgileFactory/kernel/platform/tenant/usecase"
+	"github.com/agile-factory/kernel/platform/audit"
+	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
+	tenanthttp "github.com/agile-factory/kernel/platform/tenant/delivery/http"
+	"github.com/agile-factory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/platform/tenant/usecase"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

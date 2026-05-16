@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/AgileFactory/kernel/kernel/storage"
+	"github.com/agile-factory/kernel/kernel/storage"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
