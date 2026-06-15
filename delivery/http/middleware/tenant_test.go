@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	kernelauth "github.com/AgileFactory/kernel/kernel/auth"
-	"github.com/AgileFactory/kernel/delivery/http/middleware"
+	kernelauth "github.com/agile-factory/kernel/kernel/auth"
+	"github.com/agile-factory/kernel/delivery/http/middleware"
 )
 
 // ─── tenantCapture records the tenant ID injected into the context ────────────

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AgileFactory/kernel/platform/auth/domain"
+	"github.com/agile-factory/kernel/platform/auth/domain"
 )
 
 // jwtHeader represents the JWT header

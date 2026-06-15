@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AgileFactory/kernel/platform/audit/domain"
+	"github.com/agile-factory/kernel/platform/audit/domain"
 )
 
 // ─── CursorToken encode / decode ─────────────────────────────────────────────

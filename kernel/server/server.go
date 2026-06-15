@@ -12,7 +12,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/AgileFactory/kernel/kernel/config"
+	"github.com/agile-factory/kernel/kernel/config"
 )
 
 // Server is a wrapper around http.Server

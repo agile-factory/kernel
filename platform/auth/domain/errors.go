@@ -3,7 +3,7 @@ package domain
 import (
 	"net/http"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/errors"
 )
 
 var (

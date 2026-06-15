@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/platform/tenant/domain"
 )
 
 // ─── Create (admin) ──────────────────────────────────────────────────────────

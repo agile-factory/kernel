@@ -15,7 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/AgileFactory/kernel/delivery/http/middleware"
+	"github.com/agile-factory/kernel/delivery/http/middleware"
 )
 
 // NewRouter creates and configures the main HTTP router with all global middlewares.

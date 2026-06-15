@@ -23,7 +23,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/errors"
 )
 
 // JSON sends a JSON response with the given status code.

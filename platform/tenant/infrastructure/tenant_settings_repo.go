@@ -4,8 +4,8 @@ import (
 	"context"
 	stderrors "errors"
 
-	"github.com/AgileFactory/kernel/kernel/txctx"
-	"github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/kernel/txctx"
+	"github.com/agile-factory/kernel/platform/tenant/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

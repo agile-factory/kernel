@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/AgileFactory/kernel/platform/audit/domain"
+	"github.com/agile-factory/kernel/platform/audit/domain"
 )
 
 // ListAuditLogsUseCase handles retrieval of audit logs.

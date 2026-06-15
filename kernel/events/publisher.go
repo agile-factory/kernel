@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/AgileFactory/kernel/kernel/txctx"
+	"github.com/agile-factory/kernel/kernel/txctx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

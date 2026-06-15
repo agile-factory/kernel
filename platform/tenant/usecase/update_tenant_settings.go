@@ -3,10 +3,10 @@ package usecase
 import (
 	"context"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/platform/audit"
-	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	"github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/platform/audit"
+	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
+	"github.com/agile-factory/kernel/platform/tenant/domain"
 )
 
 // UpdateTenantSettingsUseCase applies a sparse SettingsPatch to a tenant's

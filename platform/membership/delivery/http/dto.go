@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AgileFactory/kernel/platform/membership/domain"
+	"github.com/agile-factory/kernel/platform/membership/domain"
 )
 
 // ─── Invite ──────────────────────────────────────────────────────────────────

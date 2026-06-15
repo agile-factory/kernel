@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"time"
 
-	kernelauth "github.com/AgileFactory/kernel/kernel/auth"
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/kernel/response"
-	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
-	"github.com/AgileFactory/kernel/platform/tenant/domain"
-	"github.com/AgileFactory/kernel/platform/tenant/usecase"
+	kernelauth "github.com/agile-factory/kernel/kernel/auth"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/response"
+	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
+	"github.com/agile-factory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/platform/tenant/usecase"
 	"github.com/google/uuid"
 )
 

@@ -10,12 +10,12 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/AgileFactory/kernel/kernel/events"
-	"github.com/AgileFactory/kernel/platform/audit"
-	memberhttp "github.com/AgileFactory/kernel/platform/membership/delivery/http"
-	"github.com/AgileFactory/kernel/platform/membership/domain"
-	"github.com/AgileFactory/kernel/platform/membership/usecase"
-	tenantdomain "github.com/AgileFactory/kernel/platform/tenant/domain"
+	"github.com/agile-factory/kernel/kernel/events"
+	"github.com/agile-factory/kernel/platform/audit"
+	memberhttp "github.com/agile-factory/kernel/platform/membership/delivery/http"
+	"github.com/agile-factory/kernel/platform/membership/domain"
+	"github.com/agile-factory/kernel/platform/membership/usecase"
+	tenantdomain "github.com/agile-factory/kernel/platform/tenant/domain"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

@@ -3,10 +3,10 @@ package usecase
 import (
 	"context"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/platform/audit"
-	auditdomain "github.com/AgileFactory/kernel/platform/audit/domain"
-	"github.com/AgileFactory/kernel/platform/membership/domain"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/platform/audit"
+	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
+	"github.com/agile-factory/kernel/platform/membership/domain"
 )
 
 // RevokeMemberUseCase transitions a membership to REVOKED.

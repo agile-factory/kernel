@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/AgileFactory/kernel/kernel/errors"
-	"github.com/AgileFactory/kernel/kernel/response"
-	"github.com/AgileFactory/kernel/platform/auth/domain"
-	"github.com/AgileFactory/kernel/platform/auth/usecase"
-	memberdomain "github.com/AgileFactory/kernel/platform/membership/domain"
-	memberusecase "github.com/AgileFactory/kernel/platform/membership/usecase"
+	"github.com/agile-factory/kernel/kernel/errors"
+	"github.com/agile-factory/kernel/kernel/response"
+	"github.com/agile-factory/kernel/platform/auth/domain"
+	"github.com/agile-factory/kernel/platform/auth/usecase"
+	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
+	memberusecase "github.com/agile-factory/kernel/platform/membership/usecase"
 )
 
 // AuthHandler wires the auth use cases to HTTP endpoints.
