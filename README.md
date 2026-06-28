@@ -214,7 +214,7 @@ kernel/
 │   │   ├── file-structure.md       # Détail du plan du repo
 │   │   ├── technical-deepdive.md   # Invariants critiques (outbox, txctx, audit, AppError...)
 │   │   ├── adrs/                   # Architecture Decision Records (0001-0010)
-│   │   ├── rfcs/                   # Requests For Comments (0001-0026, 0028, 0038)
+│   │   │   ├── rfcs/                   # Requests For Comments (0001-0026, 0028, 0033-0036, 0038)
 │   │   └── diagrams/               # mermaid: layering + signup/invite/outbox flows + ERD
 │   ├── api/
 │   │   └── openapi.yaml            # Référence OpenAPI 3 — tous les endpoints v0.1.0
@@ -286,6 +286,15 @@ Conventions enforced par `scripts/lint.sh` en CI : pas d'`init()`, pas d'`os.Get
 |---|---|
 | [RFC-0011](docs/architecture/rfcs/0011-Platform-Notification-Multi-Canal.md) | RFC-0019 + RFC-0036 |
 | [RFC-0012](docs/architecture/rfcs/0012-Platform-Billing-Abonnements.md) | RFC-0020 |
+
+### RFCs P1bis B2B2C — PROPOSED (à valider Aziz + Lucas)
+
+| RFC | Titre | Statut |
+|---|---|---|
+| [RFC-0033](docs/architecture/rfcs/0033-Platform-End-Customers.md) | Platform end_customers — Clients Finaux | PROPOSED |
+| [RFC-0034](docs/architecture/rfcs/0034-Platform-Customer-Auth.md) | Platform customer_auth — Auth Clients Finaux | PROPOSED |
+| [RFC-0035](docs/architecture/rfcs/0035-Platform-White-Label.md) | Platform white_label — Branding Per-Tenant | PROPOSED |
+| [RFC-0036](docs/architecture/rfcs/0036-Platform-Customer-Notifications.md) | Platform customer_notifications — Email + SMS | PROPOSED |
 
 ### RFCs BaaS — DRAFT DEFERRED (P2+)
 
