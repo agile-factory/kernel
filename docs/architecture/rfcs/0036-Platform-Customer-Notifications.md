@@ -4,9 +4,12 @@
 
 ---
 
-## **Status:** `PROPOSED`
+## **Status:** `ACCEPTED`
 
 > **Supersède (sections impactées) :** [RFC-0011 — Platform Notification Multi-Canal](0011-Platform-Notification-Multi-Canal.md) *(canal SMS end-customer)*
+
+> **Review Aziz** : dispatcher proprement séparé de `platform/notification` (staff). Port `EmailSender` partagé avec RFC-0019 est une bonne décision. Les colonnes `tenant_settings` ajoutées (`sms_provider`, etc.) doivent être dans `customer_notifications/migrations/` — pas dans `notification/migrations/`.
+> **Review Lucas** : le `NoopSMSAdapter` doit être l'adapter par défaut en dev (`DEFAULT 'NOOP'` dans tenant_settings) — conforme. S'assurer que les templates `text/template` sont parsés au démarrage du module (not lazily) pour détecter les erreurs de syntaxe au boot.
 
 ---
 

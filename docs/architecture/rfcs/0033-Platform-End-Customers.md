@@ -4,7 +4,10 @@
 
 ---
 
-## **Status:** `PROPOSED`
+## **Status:** `ACCEPTED`
+
+> **Review Aziz** : architecture cohérente avec les modules existants. Pattern Config/Module/New/RegisterRoutes respecté. `UNIQUE NULLS NOT DISTINCT` valide sur PG 16. Dépendances P1bis bien ordonnées.
+> **Review Lucas** : interfaces mockables, domaine sans couplage infra. Point à corriger en implémentation : validation `metadata` (max 20 clés, max 256 chars par valeur) doit être explicitement enforced dans `CreateEndCustomerUseCase` et `UpdateEndCustomerUseCase`, pas seulement documentée.
 
 ---
 

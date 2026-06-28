@@ -4,7 +4,10 @@
 
 ---
 
-## **Status:** `PROPOSED`
+## **Status:** `ACCEPTED`
+
+> **Review Aziz** : séparation staff/customer claire. Dépendance sur RFC-0033 bien déclarée. Colonnes `tenant_settings` à ajouter dans `customer_auth/migrations/` (pas dans `auth/migrations/`) pour respecter le principe de migration par package (ADR-0006).
+> **Review Lucas (AMENDMENT INCORPORÉ)** : `jwtPayload` dans `platform/auth/infrastructure/jwt-service.go` ne supporte pas le champ `aud`. **Solution** : créer `platform/customer_auth/infrastructure/customer_jwt_service.go` avec sa propre struct `customerJWTPayload { Sub, TenantID, Aud, Exp, Iat }` — ne pas modifier le JWT staff. OTP forgot-password : avant d'insérer un `customer_reset_tokens`, vérifier s'il existe un token non expiré créé dans les 5 dernières minutes → retourner 429 (anti-spam, pas de rate-limit external requis).
 
 ---
 
@@ -111,9 +114,34 @@ type CustomerRefreshTokenRepository interface {
 }
 ```
 
-### 3. JWT Customer
+### 3. JWT Customer — `CustomerJWTService` dédié
 
-Le token customer est émis par la même infra JWT (HS256, `kernel/auth`) mais avec des claims distincts :
+**Ne pas modifier `platform/auth/infrastructure/jwt-service.go`** (staff tokens). Créer un service JWT indépendant dans ce module :
+
+```go
+// platform/customer_auth/infrastructure/customer_jwt_service.go
+package infrastructure
+
+// customerJWTPayload — claims distincts du staff JWT (ajout aud + tenant_id).
+type customerJWTPayload struct {
+    Sub      string `json:"sub"`       // end_customer_id
+    TenantID string `json:"tenant_id"` // tenant scope
+    Aud      string `json:"aud"`       // toujours "customer"
+    Exp      int64  `json:"exp"`
+    Iat      int64  `json:"iat"`
+}
+
+// CustomerJWTService émet et valide les tokens customer.
+// Même algorithme (HS256 + même secret applicatif) mais audience séparée.
+type CustomerJWTService struct {
+    secretKey     []byte
+    tokenLifespan time.Duration
+}
+```
+
+Le middleware `customer_auth.Required` valide `aud == "customer"` et injecte `end_customer_id` + `tenant_id` dans le contexte. Tout token staff présenté sur un endpoint `/customer/v1/` sera rejeté car son `aud` est absent ou `!= "customer"`.
+
+Le token customer a le profil de claims :
 
 ```json
 {

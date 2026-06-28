@@ -4,7 +4,10 @@
 
 ---
 
-## **Status:** `PROPOSED`
+## **Status:** `ACCEPTED`
+
+> **Review Aziz** : migration en deux phases pour retirer les colonnes de `tenant_settings` bien pensée. Index sur `custom_domain` avec condition `VERIFIED` est correct.
+> **Review Lucas** : `net.LookupTXT` est une I/O bloquante dans un use case — **AMENDMENT** : le use case doit wrapper l'appel avec `context.WithTimeout(ctx, 5*time.Second)` avant `net.DefaultResolver.LookupTXT(ctx, ...)`. Utiliser `net.Resolver` (stdlib) plutôt que la fonction globale pour faciliter le mock en test.
 
 ---
 
@@ -205,10 +208,23 @@ GET    /public/v1/brand                    GetPublicBrand (?tenant_id= ou Host h
 
 ```go
 // platform/white_label/usecase/verify_domain.go
-import "net"
+import (
+    "context"
+    "net"
+    "time"
+)
 
-func lookupVerificationToken(domain, expectedToken string) bool {
-    records, err := net.LookupTXT("_kernel-verify." + domain)
+// DNSResolver est un port injectable pour faciliter les tests.
+type DNSResolver interface {
+    LookupTXT(ctx context.Context, name string) ([]string, error)
+}
+
+func lookupVerificationToken(ctx context.Context, resolver DNSResolver, domain, expectedToken string) bool {
+    // Timeout court : une vérification DNS ne doit pas bloquer la requête HTTP.
+    dnsCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+    defer cancel()
+
+    records, err := resolver.LookupTXT(dnsCtx, "_kernel-verify."+domain)
     if err != nil {
         return false
     }
@@ -221,7 +237,7 @@ func lookupVerificationToken(domain, expectedToken string) bool {
 }
 ```
 
-Pas de dépendance externe — `net.LookupTXT` est stdlib.
+Production : `&net.Resolver{}` (stdlib). Tests : stub `DNSResolver` qui retourne un enregistrement précis.
 
 ---
 
