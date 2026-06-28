@@ -8,6 +8,9 @@ import (
 	"log/slog"
 	"net/smtp"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 // EmailMessage is the rendered payload an EmailSender ships out. HTML is
@@ -62,7 +65,10 @@ func (s *SMTPSender) Send(ctx context.Context, msg EmailMessage) (string, error)
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
 
-	body := buildMIME(msg)
+	// Generate a Message-ID for deliverability (required by many spam filters)
+	// and used as our externalID for tracking in notification_logs.
+	msgID := fmt.Sprintf("<%s@%s>", uuid.NewString(), s.cfg.Host)
+	body := buildMIME(msg, msgID)
 
 	// net/smtp.SendMail handles both plain and STARTTLS. Implicit-TLS
 	// (smtps:// on 465) requires a manual tls.Dial first.
@@ -96,25 +102,27 @@ func (s *SMTPSender) Send(ctx context.Context, msg EmailMessage) (string, error)
 		if err := w.Close(); err != nil {
 			return "", err
 		}
-		return "", c.Quit()
+		return msgID, c.Quit()
 	}
 
 	if err := smtp.SendMail(addr, auth, msg.From, []string{msg.To}, body); err != nil {
 		return "", fmt.Errorf("smtp sendmail: %w", err)
 	}
-	return "", nil
+	return msgID, nil
 }
 
 // buildMIME assembles a multipart/alternative body with text + html parts.
-// The hard-coded boundary is fine: it is generated per-message at runtime by
-// the caller-supplied uuid (we keep it stable per-send for simplicity, the
-// chance of a payload containing this exact string is astronomically low).
-func buildMIME(msg EmailMessage) []byte {
+// msgID must be a pre-generated RFC-5322 message-id (e.g. "<uuid@host>").
+// It is included as the Message-ID header for deliverability (required by
+// many spam filters) and returned by SMTPSender as the externalID.
+func buildMIME(msg EmailMessage, msgID string) []byte {
 	const boundary = "==agilefactory-kernel-boundary=="
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", msg.From)
 	fmt.Fprintf(&b, "To: %s\r\n", msg.To)
 	fmt.Fprintf(&b, "Subject: %s\r\n", msg.Subject)
+	fmt.Fprintf(&b, "Message-ID: %s\r\n", msgID)
+	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 +0000"))
 	b.WriteString("MIME-Version: 1.0\r\n")
 	fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=\"%s\"\r\n\r\n", boundary)
 

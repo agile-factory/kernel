@@ -6,6 +6,7 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"io/fs"
+	"strings"
 	texttemplate "text/template"
 )
 
@@ -42,13 +43,22 @@ func newRenderer() (*renderer, error) {
 		if err != nil {
 			return err
 		}
-		// path = templates/<locale>/<name>.{subject|txt|html}.tmpl
-		var locale, name, kind string
-		if _, err := fmt.Sscanf(path, "templates/%[^/]/%[^.].%[^.].tmpl", &locale, &name, &kind); err != nil {
-			// Format strictly enforced — anything else means the renderer
-			// and the on-disk tree have drifted, which we want to fail fast on.
-			return fmt.Errorf("renderer: unexpected template path %q: %w", path, err)
+		// path = "templates/<locale>/<name>.<kind>.tmpl"
+		// e.g.  "templates/en/email_verification.html.tmpl"
+		// fmt.Sscanf does not support C-style %[^/] character classes in Go;
+		// parse with strings.Split + TrimSuffix instead.
+		parts := strings.Split(path, "/")
+		if len(parts) != 3 || parts[0] != "templates" {
+			return fmt.Errorf("renderer: unexpected template path %q", path)
 		}
+		locale := parts[1]
+		filename := strings.TrimSuffix(parts[2], ".tmpl")
+		dot := strings.LastIndex(filename, ".")
+		if dot < 0 {
+			return fmt.Errorf("renderer: cannot determine kind for %q", path)
+		}
+		name := filename[:dot]
+		kind := filename[dot+1:]
 		key := locale + "/" + name
 		switch kind {
 		case "subject":

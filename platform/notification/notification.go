@@ -116,7 +116,7 @@ func (m *Module) Subscribe(bus events.Subscriber) {
 	// auth.invite_accepted is published but the v0.1 template is not yet
 	// shipped — register a no-op handler so the event is marked published
 	// and doesn't pile up in the outbox.
-	bus.Subscribe("auth.invite_accepted", m.handleInviteAcceptedStub)
+	bus.Subscribe("auth.invite_accepted", m.handleInviteAccepted)
 }
 
 // RegisterRoutes is a no-op for v0.1.0 — no HTTP surface yet.
@@ -130,6 +130,8 @@ func (m *Module) Dispatch(ctx context.Context, event Event) error {
 		return m.sendEmail(ctx, event, "email_verification")
 	case EventMemberInvited:
 		return m.sendEmail(ctx, event, "member_invited")
+	case EventInviteAccepted:
+		return m.sendEmail(ctx, event, "invite_accepted")
 	default:
 		return fmt.Errorf("notification: no template wired for %q", event.Type)
 	}
@@ -190,11 +192,53 @@ func (m *Module) handleMemberInvited(ctx context.Context, ev events.Event) error
 	})
 }
 
-// handleInviteAcceptedStub acknowledges the event without rendering; v0.1.0
-// doesn't ship the owner-notification template yet. Returning nil marks the
-// outbox row as published so it isn't retried indefinitely.
-func (m *Module) handleInviteAcceptedStub(_ context.Context, _ events.Event) error {
-	return nil
+// handleInviteAccepted notifies the inviter / tenant owner when an invite is
+// consumed. The event payload from AcceptInviteUseCase carries:
+//
+//	invitee_name, invitee_email — the new member
+//	inviter_id, inviter_email  — who sent the invite
+//	inviter_name               — display name (may be empty → falls back to email prefix)
+//	role                       — the membership role
+//	tenant_name                — workspace display name
+func (m *Module) handleInviteAccepted(ctx context.Context, ev events.Event) error {
+	inviterEmail, _ := ev.Payload["inviter_email"].(string)
+	if inviterEmail == "" {
+		// No inviter to notify (platform-onboarded tenant — no invite chain).
+		return nil
+	}
+	inviteeName, _ := ev.Payload["invitee_name"].(string)
+	inviteeEmail, _ := ev.Payload["invitee_email"].(string)
+	inviterName, _ := ev.Payload["inviter_name"].(string)
+	if inviterName == "" {
+		for i, c := range inviterEmail {
+			if c == '@' {
+				inviterName = inviterEmail[:i]
+				break
+			}
+		}
+	}
+	role, _ := ev.Payload["role"].(string)
+	tenantName, _ := ev.Payload["tenant_name"].(string)
+	if tenantName == "" {
+		tenantName = "your workspace"
+	}
+	inviterID, _ := ev.Payload["inviter_id"].(string)
+
+	return m.Dispatch(ctx, Event{
+		Type:        EventInviteAccepted,
+		Email:       inviterEmail,
+		RecipientID: inviterID,
+		TenantID:    ev.Meta.TenantID,
+		Locale:      m.cfg.DefaultLocale,
+		Payload: map[string]any{
+			"InviteeName":  inviteeName,
+			"InviteeEmail": inviteeEmail,
+			"InviterName":  inviterName,
+			"Role":         role,
+			"TenantName":   tenantName,
+			"TeamURL":      m.cfg.BaseURL + "/team",
+		},
+	})
 }
 
 // ─── Internal ─────────────────────────────────────────────────────────────────

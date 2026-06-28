@@ -19,8 +19,11 @@ import (
 	deliveryhttp "github.com/agile-factory/kernel/delivery/http"
 	"github.com/agile-factory/kernel/kernel/config"
 	"github.com/agile-factory/kernel/kernel/events"
+	"github.com/agile-factory/kernel/kernel/health"
 	"github.com/agile-factory/kernel/kernel/logger"
+	"github.com/agile-factory/kernel/kernel/metrics"
 	"github.com/agile-factory/kernel/kernel/migrator"
+	"github.com/agile-factory/kernel/kernel/permission"
 	"github.com/agile-factory/kernel/kernel/server"
 	"github.com/agile-factory/kernel/platform/audit"
 	auditinfra "github.com/agile-factory/kernel/platform/audit/infrastructure"
@@ -32,7 +35,11 @@ import (
 	notifinfra "github.com/agile-factory/kernel/platform/notification/infrastructure"
 	"github.com/agile-factory/kernel/platform/tenant"
 	tenantinfra "github.com/agile-factory/kernel/platform/tenant/infrastructure"
+	"github.com/agile-factory/kernel/platform/user"
+	userinfra "github.com/agile-factory/kernel/platform/user/infrastructure"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -73,6 +80,7 @@ func main() {
 		{Name: "membership", FS: membership.Migrations, Path: "migrations"},
 		{Name: "audit", FS: audit.Migrations, Path: "migrations"},
 		{Name: "notification", FS: notification.Migrations, Path: "migrations"},
+		{Name: "user", FS: user.Migrations, Path: "migrations"},
 	}); err != nil {
 		slog.Error("Failed to run database migrations", "error", err)
 		os.Exit(1)
@@ -168,20 +176,59 @@ func main() {
 	}
 	notifMod.Subscribe(bus) // register handlers before bus.Run starts.
 
+	// ── User profile module (P1-2) ───────────────────────────────────────────
+	profileRepo := userinfra.NewPostgresUserProfileRepository(db)
+	checker := permission.New(memberRepo)
+	userMod, err := user.New(user.Config{
+		Repo:    profileRepo,
+		Checker: checker,
+		Logger:  log,
+	})
+	if err != nil {
+		slog.Error("Failed to initialise user module", "error", err)
+		os.Exit(1)
+	}
+	userMod.Subscribe(bus) // creates profile on auth.signup_owner events
+
+	// ── Observability (P1-3) ─────────────────────────────────────────────────
+	// Prometheus metrics registry (isolated, not the global default).
+	promReg := prometheus.NewRegistry()
+	rec := metrics.NewPrometheusRecorder(promReg)
+
+	// Health / readiness handlers (replaces the inline GET /health stub).
+	healthChecker := health.New(health.Config{
+		Version:  "0.2.0",
+		DBPinger: db,
+	})
+
 	// ── HTTP wiring ──────────────────────────────────────────────────────────
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	})
+
+	// Health & readiness (public — before InternalOnly middleware)
+	mux.HandleFunc("GET /health", healthChecker.LivenessHandler)
+	mux.HandleFunc("GET /ready", healthChecker.ReadinessHandler)
+
+	// Prometheus metrics — internal only (loopback CIDR guard)
+	mux.Handle("GET /metrics", metrics.InternalOnlyMiddleware(
+		promhttp.HandlerFor(promReg, promhttp.HandlerOpts{}),
+	))
 
 	auditMod.RegisterRoutes(mux)
 	tenantMod.RegisterRoutes(mux)
 	memberMod.RegisterRoutes(mux)
 	authMod.RegisterRoutes(mux)
 	notifMod.RegisterRoutes(mux)
+	userMod.RegisterRoutes(mux)
 
-	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(mux, log))
+	// NOTE: platform/billing (P1-4) requires Postgres infrastructure
+	// implementations for SubscriptionRepository and PlanRepository before
+	// it can be wired here. Wiring is deferred until those are added.
+
+	// Wrap the mux with the Prometheus HTTP middleware so all routes are measured.
+	instrumentedMux := metrics.HTTPMiddleware(rec)(mux)
+
+	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(instrumentedMux, log))
+	healthChecker.MarkReady()
 
 	// Run lifecycle: a cancellable parent context drives the dispatcher and
 	// is cancelled on SIGINT/SIGTERM so background loops shut down cleanly
