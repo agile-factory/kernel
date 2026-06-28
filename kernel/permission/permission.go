@@ -39,3 +39,12 @@ const (
 	StorageUpload Permission = "storage:upload"
 	StorageDelete Permission = "storage:delete"
 )
+
+// EndCustomer permissions (platform/end_customers — RFC-0033).
+const (
+	EndCustomerCreate  Permission = "end_customer:create"
+	EndCustomerList    Permission = "end_customer:list"
+	EndCustomerUpdate  Permission = "end_customer:update"
+	EndCustomerDelete  Permission = "end_customer:delete"
+	EndCustomerSuspend Permission = "end_customer:suspend"
+)

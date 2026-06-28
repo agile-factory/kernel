@@ -12,6 +12,7 @@ var rolePermissions = map[domain.MemberRole]map[Permission]struct{}{
 		AuditView,
 		UserProfileView, UserProfileUpdateOwn,
 		StorageUpload, StorageDelete,
+		EndCustomerCreate, EndCustomerList, EndCustomerUpdate, EndCustomerDelete, EndCustomerSuspend,
 	),
 	domain.MEMBER_ROLE_ADMIN: permSet(
 		TenantView, TenantUpdate, // no TenantDelete — only OWNER can delete a tenant
@@ -19,18 +20,21 @@ var rolePermissions = map[domain.MemberRole]map[Permission]struct{}{
 		AuditView,
 		UserProfileView, UserProfileUpdateOwn,
 		StorageUpload, StorageDelete,
+		EndCustomerCreate, EndCustomerList, EndCustomerUpdate, EndCustomerDelete, EndCustomerSuspend,
 	),
 	domain.MEMBER_ROLE_AGENT: permSet(
 		TenantView,
 		MemberList,
 		UserProfileView, UserProfileUpdateOwn,
 		StorageUpload,
+		EndCustomerList,
 	),
 	domain.MEMBER_ROLE_VIEWER: permSet(
 		TenantView,
 		MemberList,
 		AuditView,
 		UserProfileView,
+		EndCustomerList,
 	),
 }
 
