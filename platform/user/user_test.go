@@ -60,18 +60,6 @@ func (c *stubChecker) Require(_ context.Context, _ interface{ String() string })
 	return apperrors.PermissionDenied("no permission")
 }
 
-// stubCheckerPerm uses the permission.Checker interface
-type stubCheckerImpl struct {
-	allow bool
-}
-
-func (c *stubCheckerImpl) Require(_ context.Context, _ interface{}) error {
-	if c.allow {
-		return nil
-	}
-	return apperrors.PermissionDenied("no permission")
-}
-
 // fakeSubscriber records Subscribe calls.
 type fakeSubscriber struct {
 	handlers map[string]events.EventHandler
