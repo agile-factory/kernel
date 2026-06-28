@@ -48,3 +48,9 @@ const (
 	EndCustomerDelete  Permission = "end_customer:delete"
 	EndCustomerSuspend Permission = "end_customer:suspend"
 )
+
+// Brand permissions (platform/white_label — RFC-0035).
+const (
+	BrandRead  Permission = "brand:read"
+	BrandWrite Permission = "brand:write"
+)
