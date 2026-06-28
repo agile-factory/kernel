@@ -48,18 +48,6 @@ func (r *stubRepo) Upsert(_ context.Context, p *domain.UserProfile) error {
 	return nil
 }
 
-// stubChecker allows or denies all permissions based on the allow flag.
-type stubChecker struct {
-	allow bool
-}
-
-func (c *stubChecker) Require(_ context.Context, _ interface{ String() string }) error {
-	if c.allow {
-		return nil
-	}
-	return apperrors.PermissionDenied("no permission")
-}
-
 // fakeSubscriber records Subscribe calls.
 type fakeSubscriber struct {
 	handlers map[string]events.EventHandler
