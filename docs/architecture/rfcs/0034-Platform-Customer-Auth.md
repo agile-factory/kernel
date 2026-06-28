@@ -6,8 +6,12 @@
 
 ## **Status:** `ACCEPTED`
 
-> **Review Aziz** : séparation staff/customer claire. Dépendance sur RFC-0033 bien déclarée. Colonnes `tenant_settings` à ajouter dans `customer_auth/migrations/` (pas dans `auth/migrations/`) pour respecter le principe de migration par package (ADR-0006).
-> **Review Lucas (AMENDMENT INCORPORÉ)** : `jwtPayload` dans `platform/auth/infrastructure/jwt-service.go` ne supporte pas le champ `aud`. **Solution** : créer `platform/customer_auth/infrastructure/customer_jwt_service.go` avec sa propre struct `customerJWTPayload { Sub, TenantID, Aud, Exp, Iat }` — ne pas modifier le JWT staff. OTP forgot-password : avant d'insérer un `customer_reset_tokens`, vérifier s'il existe un token non expiré créé dans les 5 dernières minutes → retourner 429 (anti-spam, pas de rate-limit external requis).
+> **Review Aziz** : séparation staff/customer claire. `password_hash VARCHAR(60)` → **`VARCHAR(72)`** (marge pour Argon2id en P2). Colonnes `tenant_settings` à ajouter dans `customer_auth/migrations/` (pas `auth/migrations/`, ADR-0006). Le `tenant_id` dans le payload JWT customer suffit pour le middleware — pas besoin de lookup supplémentaire.
+> **Review Lucas (AMENDMENTS OBLIGATOIRES)** :
+> 1. **`CustomerJWTService` dédié** — ne pas modifier `jwt-service.go` staff. Struct `customerJWTPayload { Sub, TenantID, Aud, Exp, Iat }` dans `customer_auth/infrastructure/`.
+> 2. **Rate-limit OTP SMS OBLIGATOIRE** — `CustomerForgotPasswordUseCase` doit vérifier qu'aucun `customer_reset_tokens` non expiré n'a été créé dans les **60 dernières secondes** pour ce `end_customer_id` → retourner `errors.TooManyRequests` sinon. Évite les abus de coût SMS.
+> 3. **Résistance à l'énumération d'email** — si l'email n'existe pas dans le tenant, `CustomerLoginUseCase` et `CustomerForgotPasswordUseCase` retournent `ErrInvalidCredentials` (même code, même délai) — jamais `ErrNotFound`. Aligner sur le pattern de `platform/auth/usecase/login.go`.
+> 4. **`IsLocked()` clock injectable** — `IsLocked()` utilise `time.Now()` directement → non-déterministe en test. Ajouter `clock func() time.Time` dans `CustomerCredential` ou passer en paramètre : `IsLocked(now time.Time) bool`.
 
 ---
 
@@ -68,9 +72,10 @@ type CustomerCredential struct {
     UpdatedAt      time.Time
 }
 
-// IsLocked retourne true si le compte est verrouillé (brute-force protection).
-func (c *CustomerCredential) IsLocked() bool {
-    return c.LockedUntil != nil && c.LockedUntil.After(time.Now())
+// IsLocked retourne true si le compte est verrouillé.
+// now est injecté pour la testabilité (pas de time.Now() dans le domaine).
+func (c *CustomerCredential) IsLocked(now time.Time) bool {
+    return c.LockedUntil != nil && c.LockedUntil.After(now)
 }
 ```
 
@@ -226,7 +231,7 @@ CREATE TABLE customer_credentials (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     end_customer_id  UUID NOT NULL UNIQUE REFERENCES end_customers(id) ON DELETE CASCADE,
     tenant_id        UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    password_hash    VARCHAR(60) NOT NULL,
+    password_hash    VARCHAR(72) NOT NULL,  -- bcrypt=60, marge pour Argon2id en P2
     last_login_at    TIMESTAMPTZ,
     failed_attempts  INTEGER NOT NULL DEFAULT 0,
     locked_until     TIMESTAMPTZ,

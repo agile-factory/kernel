@@ -6,8 +6,8 @@
 
 ## **Status:** `ACCEPTED`
 
-> **Review Aziz** : architecture cohérente avec les modules existants. Pattern Config/Module/New/RegisterRoutes respecté. `UNIQUE NULLS NOT DISTINCT` valide sur PG 16. Dépendances P1bis bien ordonnées.
-> **Review Lucas** : interfaces mockables, domaine sans couplage infra. Point à corriger en implémentation : validation `metadata` (max 20 clés, max 256 chars par valeur) doit être explicitement enforced dans `CreateEndCustomerUseCase` et `UpdateEndCustomerUseCase`, pas seulement documentée.
+> **Review Aziz** : architecture cohérente. Pattern Config/Module/New/RegisterRoutes correct. Index cursor/GIN/partial pertinents. Outbox sur tous les événements. À clarifier en implémentation : `GetEndCustomerUseCase` (endpoint `GET /customer/v1/customers/{id}`) doit être listé explicitement ; la gestion des tags (table séparée) doit être exposée via le même `EndCustomerRepository` ou un `TagRepository` séparé passé dans Config.
+> **Review Lucas** : domaine propre, interfaces mockables. Phone E.164 : s'appuyer sur `kernel/validator`. Metadata : enforcer en use case (max 20 clés, max 256 chars). **GIN index full-text doit inclure `WHERE deleted_at IS NULL`** pour éviter d'indexer les suppressions.
 
 ---
 
@@ -226,7 +226,8 @@ CREATE INDEX idx_end_customers_search
     USING gin(to_tsvector('simple',
         coalesce(first_name,'') || ' ' ||
         coalesce(last_name,'')  || ' ' ||
-        coalesce(email,'')));
+        coalesce(email,'')))
+    WHERE deleted_at IS NULL;
 ```
 
 ```sql

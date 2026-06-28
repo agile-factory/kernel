@@ -8,8 +8,8 @@
 
 > **Supersède (sections impactées) :** [RFC-0011 — Platform Notification Multi-Canal](0011-Platform-Notification-Multi-Canal.md) *(canal SMS end-customer)*
 
-> **Review Aziz** : dispatcher proprement séparé de `platform/notification` (staff). Port `EmailSender` partagé avec RFC-0019 est une bonne décision. Les colonnes `tenant_settings` ajoutées (`sms_provider`, etc.) doivent être dans `customer_notifications/migrations/` — pas dans `notification/migrations/`.
-> **Review Lucas** : le `NoopSMSAdapter` doit être l'adapter par défaut en dev (`DEFAULT 'NOOP'` dans tenant_settings) — conforme. S'assurer que les templates `text/template` sont parsés au démarrage du module (not lazily) pour détecter les erreurs de syntaxe au boot.
+> **Review Aziz** : dispatcher séparé de `platform/notification` correct. Port `EmailSender` partagé conforme. Colonnes `tenant_settings` dans `customer_notifications/migrations/` (pas `notification/`). **`var eventHandlers map[string]HandlerFunc` est une variable globale mutable — violation RFC-0038 §5 règle 2** : doit être initialisée dans `New(Config)` et stockée dans le Module. Les types d'événements `billing.invoice_paid` et `billing.payment_reminder` doivent être définis/documentés dans RFC-0020 (actuellement absents).
+> **Review Lucas** : Templates `text/template` parsés au boot (pas lazily) pour détecter les erreurs de syntaxe au démarrage — conforme si implémenté dans `New(Config)`. **`customer_notification_logs.body TEXT`** stocke des données sensibles (OTP, montants) : envisager de ne logger que `template_key` + `{recipient, channel}` sans le body, ou documenter explicitement le risque et prévoir chiffrement at-rest.
 
 ---
 
@@ -150,14 +150,15 @@ Le port `SMSSender` permet de swapper le provider sans changer les use cases.
 // platform/customer_notifications/dispatcher.go
 package customernotifications
 
-// Mappe event_type → handler de notification
-var eventHandlers = map[string]HandlerFunc{
-    "end_customer.created":       handleWelcome,
-    "billing.invoice_paid":       handleInvoicePaid,
-    "billing.payment_reminder":   handlePaymentReminder,
-    "customer_auth.registered":   handleCustomerAuthWelcome,
-    "customer_auth.password_reset_requested": handleOTPReset,
-}
+// eventHandlers est initialisé dans New(Config) — pas de variable globale mutable (RFC-0038).
+// Voir Module.registerHandlers() appelé depuis New().
+//
+// Types d'événements supportés :
+//   "end_customer.created"                    → welcome
+//   "billing.invoice_paid"                    → invoice_paid  (RFC-0020 à documenter)
+//   "billing.payment_reminder"                → payment_reminder
+//   "customer_auth.registered"                → customer welcome post-auth
+//   "customer_auth.password_reset_requested"  → OTP/reset link
 ```
 
 Le dispatcher s'abonne aux événements outbox via `events.Dispatcher.Subscribe(eventType, handler)`.

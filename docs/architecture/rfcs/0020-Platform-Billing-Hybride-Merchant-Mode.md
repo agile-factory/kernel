@@ -247,6 +247,17 @@ CREATE TABLE processed_events (
 
 Si `(event_id, source)` existe déjà → 200 OK sans retraitement.
 
+### 11. Événements outbox émis par platform/billing
+
+> Ajouté suite à la review RFC-0036 (Aziz) : ces types doivent être documentés comme contrat entre billing et customer_notifications.
+
+| Type | Payload | Consommateurs |
+|------|---------|---------------|
+| `billing.invoice_paid` | `{invoice_id, end_customer_id, tenant_id, amount_cents, currency}` | customer_notifications (quittance SMS/email), audit |
+| `billing.payment_reminder` | `{invoice_id, end_customer_id, tenant_id, due_at, amount_cents}` | customer_notifications (rappel) |
+| `billing.subscription_renewed` | `{tenant_id, plan_id, next_period_end}` | notification staff |
+| `billing.subscription_canceled` | `{tenant_id, canceled_at}` | notification staff, audit |
+
 ---
 
 ## **Drawbacks**

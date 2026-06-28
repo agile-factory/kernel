@@ -6,8 +6,11 @@
 
 ## **Status:** `ACCEPTED`
 
-> **Review Aziz** : migration en deux phases pour retirer les colonnes de `tenant_settings` bien pensée. Index sur `custom_domain` avec condition `VERIFIED` est correct.
-> **Review Lucas** : `net.LookupTXT` est une I/O bloquante dans un use case — **AMENDMENT** : le use case doit wrapper l'appel avec `context.WithTimeout(ctx, 5*time.Second)` avant `net.DefaultResolver.LookupTXT(ctx, ...)`. Utiliser `net.Resolver` (stdlib) plutôt que la fonction globale pour faciliter le mock en test.
+> **Review Aziz** : migration deux phases zero-downtime correcte. Index partiel `WHERE custom_domain_status = 'VERIFIED'` optimal. Distinguer les états DNS : ajouter `TIMEOUT` comme état transitoire (retenter) séparé de `FAILED` (mismatch confirmé).
+> **Review Lucas (AMENDMENTS)** :
+> 1. **DNS timeout impératif dans la spec** (pas seulement dans les drawbacks) : `context.WithTimeout(ctx, 5*time.Second)` + `net.Resolver` injectable comme port `DNSResolver` pour testabilité — déjà incorporé dans la spec §6.
+> 2. **État `TIMEOUT` distinct de `FAILED`** : timeout réseau transitoire ne doit pas bloquer définitivement. `DomainVerificationStatus` : `NOT_SET | PENDING | TIMEOUT | VERIFIED | FAILED`. `TIMEOUT` = réessayer, `FAILED` = token ne correspond pas.
+> 3. **`EmailFooterHTML` non sanitisé** : documenter explicitement que ce contenu ne doit jamais être rendu dans un navigateur sans sanitisation (XSS). Usage autorisé : rendu serveur dans les emails HTML uniquement.
 
 ---
 
@@ -58,10 +61,11 @@ import "time"
 type DomainVerificationStatus string
 
 const (
-    DomainNotSet    DomainVerificationStatus = "NOT_SET"
-    DomainPending   DomainVerificationStatus = "PENDING"
-    DomainVerified  DomainVerificationStatus = "VERIFIED"
-    DomainFailed    DomainVerificationStatus = "FAILED"
+    DomainNotSet   DomainVerificationStatus = "NOT_SET"
+    DomainPending  DomainVerificationStatus = "PENDING"
+    DomainTimeout  DomainVerificationStatus = "TIMEOUT"   // erreur réseau transitoire — réessayer
+    DomainVerified DomainVerificationStatus = "VERIFIED"
+    DomainFailed   DomainVerificationStatus = "FAILED"    // token ne correspond pas — reconfigurer
 )
 
 type BrandSettings struct {
@@ -172,7 +176,7 @@ CREATE TABLE brand_settings (
     custom_font_url            VARCHAR(500),
     custom_domain              VARCHAR(255),
     custom_domain_status       VARCHAR(20)  NOT NULL DEFAULT 'NOT_SET'
-                                   CHECK (custom_domain_status IN ('NOT_SET','PENDING','VERIFIED','FAILED')),
+                                   CHECK (custom_domain_status IN ('NOT_SET','PENDING','TIMEOUT','VERIFIED','FAILED')),
     custom_domain_token        VARCHAR(100),
     custom_domain_verified_at  TIMESTAMPTZ,
     email_footer_html          TEXT,
