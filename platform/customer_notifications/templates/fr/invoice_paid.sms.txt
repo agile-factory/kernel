@@ -1,0 +1,1 @@
+{{.TenantAppName}} — Paiement reçu : {{.InvoiceAmount}} {{.InvoiceCurrency}}. Merci, {{.CustomerFirstName}}.

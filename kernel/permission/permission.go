@@ -54,3 +54,8 @@ const (
 	BrandRead  Permission = "brand:read"
 	BrandWrite Permission = "brand:write"
 )
+
+const (
+	CustomerNotificationView  Permission = "customer_notification:view"
+	CustomerTemplateWrite     Permission = "customer_template:write"
+)

@@ -1,0 +1,1 @@
+{{.TenantAppName}} — Code de réinitialisation : {{.OTPCode}}. Valide 1h. Ne partagez pas ce code.

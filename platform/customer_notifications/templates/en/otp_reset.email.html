@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Password Reset — {{.TenantAppName}}</title></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  {{if .TenantLogoURL}}<img src="{{.TenantLogoURL}}" alt="{{.TenantAppName}}" style="max-height:60px;margin-bottom:20px"><br>{{end}}
+  <h2 style="color:{{if .TenantPrimaryColor}}{{.TenantPrimaryColor}}{{else}}#000{{end}}">Password Reset</h2>
+  <p>Hello {{.CustomerFirstName}},</p>
+  <p>You requested a password reset for your <strong>{{.TenantAppName}}</strong> account.</p>
+  {{if .OTPCode}}
+  <p>Your verification code is:</p>
+  <p style="font-size:32px;font-weight:bold;letter-spacing:8px;color:{{if .TenantPrimaryColor}}{{.TenantPrimaryColor}}{{else}}#000{{end}}">{{.OTPCode}}</p>
+  <p>This code expires in <strong>1 hour</strong>.</p>
+  {{end}}
+  {{if .ResetLink}}
+  <p>Or click here: <a href="{{.ResetLink}}" style="color:{{if .TenantPrimaryColor}}{{.TenantPrimaryColor}}{{else}}#000{{end}}">Reset my password</a></p>
+  {{end}}
+  <p>If you did not request this, please ignore this email.</p>
+  {{if .SupportEmail}}<p>Need help? <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a></p>{{end}}
+</body>
+</html>

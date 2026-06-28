@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><title>Réinitialisation de mot de passe — {{.TenantAppName}}</title></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  {{if .TenantLogoURL}}<img src="{{.TenantLogoURL}}" alt="{{.TenantAppName}}" style="max-height:60px;margin-bottom:20px"><br>{{end}}
+  <h2 style="color:{{if .TenantPrimaryColor}}{{.TenantPrimaryColor}}{{else}}#000{{end}}">Réinitialisation de mot de passe</h2>
+  <p>Bonjour {{.CustomerFirstName}},</p>
+  <p>Vous avez demandé la réinitialisation de votre mot de passe sur <strong>{{.TenantAppName}}</strong>.</p>
+  {{if .OTPCode}}
+  <p>Votre code de vérification est :</p>
+  <p style="font-size:32px;font-weight:bold;letter-spacing:8px;color:{{if .TenantPrimaryColor}}{{.TenantPrimaryColor}}{{else}}#000{{end}}">{{.OTPCode}}</p>
+  <p>Ce code expire dans <strong>1 heure</strong>.</p>
+  {{end}}
+  {{if .ResetLink}}
+  <p>Ou cliquez sur ce lien : <a href="{{.ResetLink}}" style="color:{{if .TenantPrimaryColor}}{{.TenantPrimaryColor}}{{else}}#000{{end}}">Réinitialiser mon mot de passe</a></p>
+  {{end}}
+  <p>Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.</p>
+  {{if .SupportEmail}}<p>Besoin d'aide ? <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a></p>{{end}}
+</body>
+</html>

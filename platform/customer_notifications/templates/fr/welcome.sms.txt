@@ -1,0 +1,1 @@
+Bienvenue sur {{.TenantAppName}}, {{.CustomerFirstName}} ! Votre compte a été créé avec succès.

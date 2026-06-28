@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><title>Bienvenue sur {{.TenantAppName}}</title></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  {{if .TenantLogoURL}}<img src="{{.TenantLogoURL}}" alt="{{.TenantAppName}}" style="max-height:60px;margin-bottom:20px"><br>{{end}}
+  <h2 style="color:{{if .TenantPrimaryColor}}{{.TenantPrimaryColor}}{{else}}#000{{end}}">Bienvenue, {{.CustomerFirstName}} !</h2>
+  <p>Votre compte sur <strong>{{.TenantAppName}}</strong> a été créé avec succès.</p>
+  <p>Vous pouvez maintenant vous connecter et profiter de nos services.</p>
+  {{if .SupportEmail}}<p>Des questions ? Contactez-nous : <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a></p>{{end}}
+</body>
+</html>
