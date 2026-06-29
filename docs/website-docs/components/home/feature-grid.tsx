@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import {
+  ArrowRight,
   Bell,
   Building2,
   CreditCard,
@@ -71,17 +72,21 @@ export function FeatureGrid() {
           <Link
             key={feature.title}
             href={feature.href}
-            className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-6 transition-colors hover:border-primary/40"
+            className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-6 transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
           >
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20 transition-all group-hover:bg-primary/15">
               <feature.icon className="size-5" aria-hidden="true" />
             </span>
             <h3 className="font-semibold text-foreground group-hover:text-primary">
               {feature.title}
             </h3>
-            <p className="text-sm leading-relaxed text-muted-foreground">
+            <p className="flex-1 text-sm leading-relaxed text-muted-foreground">
               {feature.description}
             </p>
+            <span className="flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+              Explore module
+              <ArrowRight className="size-3" aria-hidden="true" />
+            </span>
           </Link>
         ))}
       </div>

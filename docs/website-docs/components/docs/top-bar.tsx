@@ -1,11 +1,19 @@
 'use client'
 
+import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { GitHubIcon, Logo } from '@/components/logo'
 import { SearchTrigger } from '@/components/search-dialog'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { SidebarNav } from './sidebar-nav'
+
+const NAV_LINKS = [
+  { href: '/docs', label: 'Docs' },
+  { href: '/docs/modules/auth', label: 'Modules' },
+  { href: '/docs/architecture', label: 'Architecture' },
+  { href: '/changelog', label: 'Changelog' },
+]
 
 export function TopBar() {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -30,6 +38,19 @@ export function TopBar() {
         </button>
 
         <Logo />
+
+        {/* Desktop nav links */}
+        <nav className="ml-4 hidden items-center gap-1 lg:flex" aria-label="Site navigation">
+          {NAV_LINKS.map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
 
         <div className="ml-auto flex items-center gap-2">
           <div className="hidden sm:block">

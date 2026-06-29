@@ -25,13 +25,16 @@ export function DocPage({
             {prev ? (
               <Link
                 href={prev.href}
-                className="group flex flex-col gap-1 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40"
+                className="group flex flex-col gap-1.5 rounded-xl border border-border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5"
               >
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <ArrowLeft className="size-3.5" aria-hidden="true" />
+                  <ArrowLeft
+                    className="size-3.5 transition-transform group-hover:-translate-x-0.5"
+                    aria-hidden="true"
+                  />
                   Previous
                 </span>
-                <span className="font-medium text-foreground group-hover:text-primary">
+                <span className="font-medium text-foreground transition-colors group-hover:text-primary">
                   {prev.title}
                 </span>
               </Link>
@@ -41,13 +44,16 @@ export function DocPage({
             {next ? (
               <Link
                 href={next.href}
-                className="group flex flex-col gap-1 rounded-xl border border-border bg-card p-4 text-right transition-colors hover:border-primary/40 sm:items-end"
+                className="group flex flex-col gap-1.5 rounded-xl border border-border bg-card p-5 text-right transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md hover:shadow-primary/5 sm:items-end"
               >
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   Next
-                  <ArrowRight className="size-3.5" aria-hidden="true" />
+                  <ArrowRight
+                    className="size-3.5 transition-transform group-hover:translate-x-0.5"
+                    aria-hidden="true"
+                  />
                 </span>
-                <span className="font-medium text-foreground group-hover:text-primary">
+                <span className="font-medium text-foreground transition-colors group-hover:text-primary">
                   {next.title}
                 </span>
               </Link>
