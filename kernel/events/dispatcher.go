@@ -6,19 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// OutboxDispatcher is the single-writer poll loop: it acquires a Postgres
-// advisory lock (so only one instance dispatches at a time), reads a batch
-// of due events via SELECT FOR UPDATE SKIP LOCKED, invokes the registered
-// handlers, then marks each event published (success) or schedules a retry
-// with exponential backoff (failure). After MaxAttempts failures the event
-// stays in the table without published_at — quarantine, surfaced via
-// the admin query and an alert at the operator's discretion.
+// OutboxDispatcher polls the outbox and dispatches events. It acquires a
+// Postgres advisory lock so only one instance dispatches at a time across
+// replicas. When WorkerCount > 1, events within a batch are dispatched
+// concurrently: each worker owns its own connection + transaction, so
+// row-level conflicts are impossible given the advisory lock guard.
+//
+// Dispatch flow:
+//  1. Acquire advisory lock on a dedicated connection (held for full batch).
+//  2. Fetch due events in a short tx with SELECT FOR UPDATE SKIP LOCKED.
+//  3. Commit the fetch tx — releases row locks, advisory lock stays held.
+//  4. Fan out to WorkerCount goroutines; each processes its slice with its
+//     own connection + tx (mark published or record failure).
+//  5. Release advisory lock + return connection to pool.
 type OutboxDispatcher struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
@@ -27,6 +34,7 @@ type OutboxDispatcher struct {
 	batchSize      int
 	maxAttempts    int
 	advisoryLockID int64
+	workerCount    int
 
 	handlersFor func(eventType string) []EventHandler
 }
@@ -39,17 +47,19 @@ func newOutboxDispatcher(cfg Config, handlersFor func(string) []EventHandler) *O
 		batchSize:      cfg.BatchSize,
 		maxAttempts:    cfg.MaxAttempts,
 		advisoryLockID: cfg.AdvisoryLockID,
+		workerCount:    cfg.WorkerCount,
 		handlersFor:    handlersFor,
 	}
 }
 
-// Run polls until ctx is cancelled. A polling tick that hits a transient
-// database error logs and continues — the next tick will retry.
+// Run polls until ctx is cancelled. Transient DB errors are logged and the
+// loop continues — the next tick will retry.
 func (d *OutboxDispatcher) Run(ctx context.Context) error {
 	d.logger.Info("outbox dispatcher starting",
 		"poll_interval", d.pollInterval,
 		"batch_size", d.batchSize,
 		"max_attempts", d.maxAttempts,
+		"worker_count", d.workerCount,
 	)
 	ticker := time.NewTicker(d.pollInterval)
 	defer ticker.Stop()
@@ -78,36 +88,29 @@ FOR UPDATE SKIP LOCKED
 `
 
 func (d *OutboxDispatcher) dispatchBatch(ctx context.Context) error {
-	conn, err := d.pool.Acquire(ctx)
+	// Step 1 — acquire a dedicated connection that holds the advisory lock
+	// for the full duration of this batch (fetch + dispatch).
+	lockConn, err := d.pool.Acquire(ctx)
 	if err != nil {
-		return fmt.Errorf("acquire conn: %w", err)
+		return fmt.Errorf("acquire lock conn: %w", err)
 	}
-	defer conn.Release()
+	defer lockConn.Release()
 
-	// Session-level advisory lock: only one dispatcher is allowed to scan
-	// at a time. Released explicitly before conn is returned to the pool
-	// (defer order: unlock fires before Release).
 	var acquired bool
-	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, d.advisoryLockID).Scan(&acquired); err != nil {
+	if err := lockConn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, d.advisoryLockID).Scan(&acquired); err != nil {
 		return fmt.Errorf("try advisory lock: %w", err)
 	}
 	if !acquired {
-		// Another instance owns the lock — quiet skip, will retry next tick.
-		return nil
+		return nil // another instance owns the lock — skip quietly
 	}
 	defer func() {
-		if _, err := conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, d.advisoryLockID); err != nil {
+		if _, err := lockConn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, d.advisoryLockID); err != nil {
 			d.logger.Warn("outbox dispatcher: advisory unlock failed", "error", err)
 		}
 	}()
 
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	batch, err := d.fetchBatch(ctx, tx)
+	// Step 2 — fetch the batch (short tx, commits immediately after scan).
+	batch, err := d.fetchBatch(ctx, lockConn)
 	if err != nil {
 		return err
 	}
@@ -115,33 +118,56 @@ func (d *OutboxDispatcher) dispatchBatch(ctx context.Context) error {
 		return nil
 	}
 
-	for _, ev := range batch {
-		if err := d.dispatchOne(ctx, tx, ev); err != nil {
-			// dispatchOne already records the failure on the row; surfacing
-			// the error here would break processing of the remaining batch.
-			d.logger.Error("outbox dispatcher: dispatch error",
-				"event_id", ev.id, "event_type", ev.event.Type, "error", err)
+	// Step 3 — dispatch in parallel via worker pool.
+	if d.workerCount <= 1 {
+		// Serial path — avoids goroutine overhead for WorkerCount=1.
+		for _, ev := range batch {
+			if err := d.processOne(ctx, ev); err != nil {
+				d.logger.Error("outbox dispatcher: process error",
+					"event_id", ev.id, "event_type", ev.event.Type, "error", err)
+			}
 		}
+		return nil
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit: %w", err)
+	// Parallel path — split batch into workerCount slices.
+	work := make(chan pendingEvent, len(batch))
+	for _, ev := range batch {
+		work <- ev
 	}
+	close(work)
+
+	var wg sync.WaitGroup
+	wg.Add(d.workerCount)
+	for range d.workerCount {
+		go func() {
+			defer wg.Done()
+			for ev := range work {
+				if err := d.processOne(ctx, ev); err != nil {
+					d.logger.Error("outbox dispatcher: process error",
+						"event_id", ev.id, "event_type", ev.event.Type, "error", err)
+				}
+			}
+		}()
+	}
+	wg.Wait()
 	return nil
 }
 
-type pendingEvent struct {
-	id       string
-	event    Event
-	attempts int
-}
+// fetchBatch runs a SELECT FOR UPDATE SKIP LOCKED in its own short transaction
+// on lockConn (which holds the advisory lock). It commits immediately so row
+// locks are released before the (potentially slow) handler execution begins.
+func (d *OutboxDispatcher) fetchBatch(ctx context.Context, lockConn *pgxpool.Conn) ([]pendingEvent, error) {
+	tx, err := lockConn.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin fetch tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 
-func (d *OutboxDispatcher) fetchBatch(ctx context.Context, tx pgx.Tx) ([]pendingEvent, error) {
 	rows, err := tx.Query(ctx, selectDueEventsSQL, d.maxAttempts, d.batchSize)
 	if err != nil {
 		return nil, fmt.Errorf("select due events: %w", err)
 	}
-	defer rows.Close()
 
 	var batch []pendingEvent
 	for rows.Next() {
@@ -155,6 +181,7 @@ func (d *OutboxDispatcher) fetchBatch(ctx context.Context, tx pgx.Tx) ([]pending
 			metaPayload EventMeta
 		)
 		if err := rows.Scan(&id, &eventType, &payloadRaw, &metaRaw, &attempts); err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		if len(payloadRaw) > 0 {
@@ -178,21 +205,53 @@ func (d *OutboxDispatcher) fetchBatch(ctx context.Context, tx pgx.Tx) ([]pending
 			attempts: attempts,
 		})
 	}
+	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows iter: %w", err)
+	}
+
+	// Commit releases the row locks. Advisory lock stays on lockConn.
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit fetch tx: %w", err)
 	}
 	return batch, nil
 }
 
-func (d *OutboxDispatcher) dispatchOne(ctx context.Context, tx pgx.Tx, pe pendingEvent) error {
-	handlers := d.handlersFor(pe.event.Type)
+type pendingEvent struct {
+	id       string
+	event    Event
+	attempts int
+}
 
-	// No handlers? Mark published — the event was emitted but nobody cares.
-	// Avoids accumulating events forever and lets operators audit volume.
-	if len(handlers) == 0 {
-		return d.markPublished(ctx, tx, pe.id)
+// processOne acquires a fresh connection from the pool, runs the handlers,
+// and commits the status update in its own transaction. Each worker calls
+// this independently so failures are isolated per-event.
+func (d *OutboxDispatcher) processOne(ctx context.Context, pe pendingEvent) error {
+	conn, err := d.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire worker conn: %w", err)
+	}
+	defer conn.Release()
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin worker tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := d.dispatchOne(ctx, tx, pe); err != nil {
+		return err
 	}
 
+	return tx.Commit(ctx)
+}
+
+func (d *OutboxDispatcher) dispatchOne(ctx context.Context, tx pgx.Tx, pe pendingEvent) error {
+	handlers := d.handlersFor(pe.event.Type)
+	if len(handlers) == 0 {
+		// No handlers registered — mark published to avoid accumulation.
+		return d.markPublished(ctx, tx, pe.id)
+	}
 	for _, h := range handlers {
 		if err := h(ctx, pe.event); err != nil {
 			return d.recordFailure(ctx, tx, pe, err)
@@ -226,16 +285,14 @@ WHERE id = $3
 // backoff returns the delay before the next retry, doubling each attempt
 // up to a hard cap (5 minutes per RFC-0015 v1.1).
 func backoff(attempts int) time.Duration {
-	const cap = 5 * time.Minute
-	// 1s · 2^attempts. Cap exponent at 8 (256s) before the explicit ceiling
-	// to avoid overflow on absurd attempt counts.
+	const maxBackoff = 5 * time.Minute
 	exp := attempts
 	if exp > 8 {
 		exp = 8
 	}
 	d := time.Duration(1<<exp) * time.Second
-	if d > cap {
-		return cap
+	if d > maxBackoff {
+		return maxBackoff
 	}
 	return d
 }
