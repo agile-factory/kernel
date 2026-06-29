@@ -1,0 +1,1 @@
+{{.TenantAppName}} — Reset code: {{.OTPCode}}. Valid 1h. Do not share this code.

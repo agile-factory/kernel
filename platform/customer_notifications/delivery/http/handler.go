@@ -92,15 +92,15 @@ func (h *CustomerNotificationsHandler) UpsertTemplate(w http.ResponseWriter, r *
 		response.Error(w, kerrors.BadRequest("body_tmpl is required"))
 		return
 	}
-	locale := body.Locale
-	if locale == "" {
-		locale = "fr"
+	if body.Locale == "" {
+		response.Error(w, kerrors.BadRequest("locale is required"))
+		return
 	}
 
 	if err := h.upsertUC.Execute(r.Context(), tenantID, usecase.UpsertCustomerTemplateInput{
 		Key:         key,
 		Channel:     ch,
-		Locale:      locale,
+		Locale:      body.Locale,
 		SubjectTmpl: body.SubjectTmpl,
 		BodyTmpl:    body.BodyTmpl,
 	}); err != nil {
@@ -117,7 +117,8 @@ func (h *CustomerNotificationsHandler) DeleteTemplate(w http.ResponseWriter, r *
 	ch := domain.Channel(r.PathValue("channel"))
 	locale := r.URL.Query().Get("locale")
 	if locale == "" {
-		locale = "fr"
+		response.Error(w, kerrors.BadRequest("locale query parameter is required"))
+		return
 	}
 
 	if err := h.deleteUC.Execute(r.Context(), tenantID, key, ch, locale); err != nil {
@@ -131,7 +132,8 @@ func (h *CustomerNotificationsHandler) DeleteTemplate(w http.ResponseWriter, r *
 func (h *CustomerNotificationsHandler) ListLogs(w http.ResponseWriter, r *http.Request) {
 	tenantID := kernelauth.TenantIDFromContext(r.Context())
 	if tenantID == "" {
-		tenantID = r.PathValue("id")
+		response.Error(w, kerrors.Unauthorized("missing tenant identity in context"))
+		return
 	}
 	q := r.URL.Query()
 

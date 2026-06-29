@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"text/template"
+	htmltmpl "html/template"
+	"strings"
+	texttmpl "text/template"
 	"time"
 
 	"github.com/agile-factory/kernel/platform/customer_notifications/domain"
@@ -22,11 +24,12 @@ type SendCustomerNotificationUseCase struct {
 	brandResolver    domain.BrandResolver
 	emailSender      domain.EmailSender
 	smsSender        domain.SMSSender
-	defaultTemplates map[string]*template.Template // keyed by "key.channel.locale"
+	defaultHTMLTemplates map[string]*htmltmpl.Template // keyed by "locale/key.email.html"
+	defaultTextTemplates map[string]*texttmpl.Template // keyed by "locale/key.sms.txt"
 }
 
 // NewSendCustomerNotificationUseCase wires the use case.
-// defaultTemplates must be pre-parsed at boot; map is read-only after construction.
+// defaultHTMLTemplates and defaultTextTemplates must be pre-parsed at boot; maps are read-only after construction.
 func NewSendCustomerNotificationUseCase(
 	db *pgxpool.Pool,
 	logRepo domain.NotificationLogRepository,
@@ -35,17 +38,19 @@ func NewSendCustomerNotificationUseCase(
 	brandResolver domain.BrandResolver,
 	emailSender domain.EmailSender,
 	smsSender domain.SMSSender,
-	defaultTemplates map[string]*template.Template,
+	defaultHTMLTemplates map[string]*htmltmpl.Template,
+	defaultTextTemplates map[string]*texttmpl.Template,
 ) *SendCustomerNotificationUseCase {
 	return &SendCustomerNotificationUseCase{
-		db:               db,
-		logRepo:          logRepo,
-		templateRepo:     templateRepo,
-		customerResolver: customerResolver,
-		brandResolver:    brandResolver,
-		emailSender:      emailSender,
-		smsSender:        smsSender,
-		defaultTemplates: defaultTemplates,
+		db:                   db,
+		logRepo:              logRepo,
+		templateRepo:         templateRepo,
+		customerResolver:     customerResolver,
+		brandResolver:        brandResolver,
+		emailSender:          emailSender,
+		smsSender:            smsSender,
+		defaultHTMLTemplates: defaultHTMLTemplates,
+		defaultTextTemplates: defaultTextTemplates,
 	}
 }
 
@@ -54,8 +59,8 @@ type SendCustomerNotificationInput struct {
 	TenantID      string
 	EndCustomerID string
 	TemplateKey   string
-	Locale        string           // "" → "fr"
-	Channel       domain.Channel   // "" → determined by tenant_settings / contact availability
+	Locale        string            // "" → "fr"
+	Channel       domain.Channel    // "" → determined by contact availability
 	ExtraData     map[string]string // merged into TemplateData (OTPCode, ResetLink, etc.)
 }
 
@@ -173,15 +178,15 @@ func (uc *SendCustomerNotificationUseCase) renderTemplate(
 ) (subject, body string, err error) {
 	override, lookupErr := uc.templateRepo.Find(ctx, tenantID, key, ch, locale)
 	if lookupErr == nil {
-		// Use tenant override.
+		// Use tenant override — channel-aware rendering.
 		if override.SubjectTmpl != "" {
-			s, e := renderString(override.SubjectTmpl, data)
+			s, e := renderString(ch, override.SubjectTmpl, data)
 			if e != nil {
 				return "", "", e
 			}
 			subject = s
 		}
-		b, e := renderString(override.BodyTmpl, data)
+		b, e := renderString(ch, override.BodyTmpl, data)
 		if e != nil {
 			return "", "", e
 		}
@@ -189,7 +194,19 @@ func (uc *SendCustomerNotificationUseCase) renderTemplate(
 	}
 
 	// Fall back to default embedded template.
-	tmpl, ok := uc.defaultTemplates[tmplKey]
+	if strings.HasSuffix(tmplKey, ".html") {
+		tmpl, ok := uc.defaultHTMLTemplates[tmplKey]
+		if !ok {
+			return "", "", fmt.Errorf("no default template for %s", tmplKey)
+		}
+		var buf bytes.Buffer
+		if e := tmpl.Execute(&buf, data); e != nil {
+			return "", "", e
+		}
+		return subject, buf.String(), nil
+	}
+
+	tmpl, ok := uc.defaultTextTemplates[tmplKey]
 	if !ok {
 		return "", "", fmt.Errorf("no default template for %s", tmplKey)
 	}
@@ -208,12 +225,24 @@ func templateKey(key string, ch domain.Channel, locale string) string {
 	return locale + "/" + key + "." + ext
 }
 
-func renderString(tmplStr string, data domain.TemplateData) (string, error) {
-	t, err := template.New("").Parse(tmplStr)
+// renderString parses and executes a tenant-supplied template string.
+// Uses html/template for EMAIL (XSS-safe) and text/template for SMS.
+func renderString(ch domain.Channel, tmplStr string, data domain.TemplateData) (string, error) {
+	var buf bytes.Buffer
+	if ch == domain.ChannelEmail {
+		t, err := htmltmpl.New("").Parse(tmplStr)
+		if err != nil {
+			return "", err
+		}
+		if err := t.Execute(&buf, data); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
+	}
+	t, err := texttmpl.New("").Parse(tmplStr)
 	if err != nil {
 		return "", err
 	}
-	var buf bytes.Buffer
 	if err := t.Execute(&buf, data); err != nil {
 		return "", err
 	}

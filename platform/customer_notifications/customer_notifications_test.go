@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -347,6 +348,40 @@ func TestHandleEvent_InvoicePaid(t *testing.T) {
 	}
 }
 
+func TestHandleEvent_PaymentReminder(t *testing.T) {
+	logRepo := &stubLogRepo{}
+	emailSender := &stubEmailSender{}
+	mod := newModule(t, logRepo, newStubTemplateRepo(), emailSender, true)
+	sub := newStubSubscriber()
+	mod.RegisterHandlers(sub)
+
+	ctx := context.Background()
+	err := sub.trigger(ctx, events.Event{
+		Type: "billing.payment_reminder",
+		Payload: map[string]any{
+			"end_customer_id": "ec-5",
+			"tenant_id":       "t-1",
+			"amount":          "2500",
+			"currency":        "XOF",
+		},
+	})
+	if err != nil {
+		t.Fatalf("trigger: %v", err)
+	}
+
+	logRepo.mu.Lock()
+	defer logRepo.mu.Unlock()
+	if len(logRepo.logs) == 0 {
+		t.Fatal("expected log entry")
+	}
+	if logRepo.logs[0].TemplateKey != "payment_reminder" {
+		t.Errorf("expected payment_reminder, got %s", logRepo.logs[0].TemplateKey)
+	}
+	if logRepo.logs[0].Status != domain.StatusSent {
+		t.Errorf("expected SENT status, got %s", logRepo.logs[0].Status)
+	}
+}
+
 func TestHandleEvent_MissingIDs_Skipped(t *testing.T) {
 	logRepo := &stubLogRepo{}
 	mod := newModule(t, logRepo, newStubTemplateRepo(), &stubEmailSender{}, true)
@@ -575,5 +610,8 @@ func TestHandleEvent_TenantOverrideTemplate(t *testing.T) {
 	defer emailSender.mu.Unlock()
 	if len(emailSender.sends) == 0 {
 		t.Fatal("expected email to be sent")
+	}
+	if !strings.Contains(emailSender.sends[0].body, "depuis override") {
+		t.Errorf("expected override body, got: %s", emailSender.sends[0].body)
 	}
 }

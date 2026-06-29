@@ -2,7 +2,8 @@ package usecase
 
 import (
 	"context"
-	"text/template"
+	htmltmpl "html/template"
+	texttmpl "text/template"
 
 	kerrors "github.com/agile-factory/kernel/kernel/errors"
 	"github.com/agile-factory/kernel/kernel/permission"
@@ -38,6 +39,9 @@ func (uc *UpsertCustomerTemplateUseCase) Execute(ctx context.Context, tenantID s
 	if !domain.SupportedTemplateKeys[in.Key] {
 		return domain.ErrUnsupportedTemplateKey
 	}
+	if in.Channel != domain.ChannelEmail && in.Channel != domain.ChannelSMS {
+		return kerrors.BadRequest("channel must be EMAIL or SMS")
+	}
 	if in.Locale == "" {
 		return kerrors.BadRequest("locale is required")
 	}
@@ -46,12 +50,24 @@ func (uc *UpsertCustomerTemplateUseCase) Execute(ctx context.Context, tenantID s
 	}
 
 	// Parse templates at upsert time (Lucas amendment: catch syntax errors early).
-	if _, err := template.New("body").Parse(in.BodyTmpl); err != nil {
-		return domain.ErrTemplateInvalid
-	}
-	if in.SubjectTmpl != "" {
-		if _, err := template.New("subject").Parse(in.SubjectTmpl); err != nil {
+	// Use html/template for EMAIL (XSS-safe), text/template for SMS.
+	if in.Channel == domain.ChannelEmail {
+		if _, err := htmltmpl.New("body").Parse(in.BodyTmpl); err != nil {
 			return domain.ErrTemplateInvalid
+		}
+		if in.SubjectTmpl != "" {
+			if _, err := htmltmpl.New("subject").Parse(in.SubjectTmpl); err != nil {
+				return domain.ErrTemplateInvalid
+			}
+		}
+	} else {
+		if _, err := texttmpl.New("body").Parse(in.BodyTmpl); err != nil {
+			return domain.ErrTemplateInvalid
+		}
+		if in.SubjectTmpl != "" {
+			if _, err := texttmpl.New("subject").Parse(in.SubjectTmpl); err != nil {
+				return domain.ErrTemplateInvalid
+			}
 		}
 	}
 

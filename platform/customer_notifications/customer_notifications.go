@@ -23,10 +23,12 @@ import (
 	"context"
 	"embed"
 	"errors"
+	htmltmpl "html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"text/template"
+	"strings"
+	texttmpl "text/template"
 
 	"github.com/agile-factory/kernel/kernel/events"
 	"github.com/agile-factory/kernel/kernel/permission"
@@ -95,7 +97,7 @@ func New(cfg Config) (*Module, error) {
 	}
 
 	// Parse all embedded templates at boot (Lucas amendment).
-	defaultTemplates, err := parseDefaultTemplates()
+	htmlTmpls, textTmpls, err := parseDefaultTemplates()
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +110,8 @@ func New(cfg Config) (*Module, error) {
 		cfg.BrandResolver,
 		cfg.EmailSender,
 		cfg.SMSSender,
-		defaultTemplates,
+		htmlTmpls,
+		textTmpls,
 	)
 
 	upsertUC := usecase.NewUpsertCustomerTemplateUseCase(cfg.TemplateRepo, cfg.Checker)
@@ -219,12 +222,14 @@ func (m *Module) handleEvent(ctx context.Context, ev events.Event) error {
 }
 
 // parseDefaultTemplates parses all embedded template files at boot.
-// Returns a map keyed by "locale/key.channel.ext" (e.g. "fr/otp_reset.email.html").
-func parseDefaultTemplates() (map[string]*template.Template, error) {
-	templates := map[string]*template.Template{}
+// HTML templates (.html) are parsed with html/template (XSS-safe); text templates (.txt) with text/template.
+// Keys are "locale/key.channel.ext" (e.g. "fr/otp_reset.email.html").
+func parseDefaultTemplates() (map[string]*htmltmpl.Template, map[string]*texttmpl.Template, error) {
+	htmlTemplates := map[string]*htmltmpl.Template{}
+	textTemplates := map[string]*texttmpl.Template{}
 	sub, err := fs.Sub(defaultTemplatesFS, "templates")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	err = fs.WalkDir(sub, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -234,12 +239,20 @@ func parseDefaultTemplates() (map[string]*template.Template, error) {
 		if readErr != nil {
 			return readErr
 		}
-		t, parseErr := template.New(path).Parse(string(data))
-		if parseErr != nil {
-			return parseErr
+		if strings.HasSuffix(path, ".html") {
+			t, parseErr := htmltmpl.New(path).Parse(string(data))
+			if parseErr != nil {
+				return parseErr
+			}
+			htmlTemplates[path] = t
+		} else {
+			t, parseErr := texttmpl.New(path).Parse(string(data))
+			if parseErr != nil {
+				return parseErr
+			}
+			textTemplates[path] = t
 		}
-		templates[path] = t
 		return nil
 	})
-	return templates, err
+	return htmlTemplates, textTemplates, err
 }

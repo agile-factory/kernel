@@ -1,0 +1,1 @@
+{{.TenantAppName}} — Reminder: payment of {{.InvoiceAmount}} {{.InvoiceCurrency}} pending. Please settle, {{.CustomerFirstName}}.

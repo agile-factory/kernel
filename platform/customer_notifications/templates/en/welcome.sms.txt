@@ -1,0 +1,1 @@
+{{.TenantAppName}} — Welcome, {{.CustomerFirstName}}! Your account has been created.

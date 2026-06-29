@@ -2,13 +2,11 @@ package infrastructure
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/agile-factory/kernel/platform/customer_notifications/domain"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -44,6 +42,8 @@ func (r *PostgresNotificationLogRepository) UpdateStatus(ctx context.Context, id
 }
 
 // List returns a cursor-paginated list of notification logs.
+// Cursor format: "{created_at RFC3339Nano}|{id}" — encodes the last row of the previous page.
+// Ordering: created_at DESC, id DESC (consistent with cursor).
 func (r *PostgresNotificationLogRepository) List(ctx context.Context, opts domain.ListLogsOptions) ([]*domain.CustomerNotificationLog, string, error) {
 	limit := opts.Limit
 	if limit <= 0 || limit > 100 {
@@ -76,7 +76,13 @@ func (r *PostgresNotificationLogRepository) List(ctx context.Context, opts domai
 		clauses = append(clauses, "template_key = "+addArg(opts.TemplateKey))
 	}
 	if opts.Cursor != "" {
-		clauses = append(clauses, "id < "+addArg(opts.Cursor))
+		// Cursor is "{created_at}|{id}" — decode into composite comparison.
+		parts := strings.SplitN(opts.Cursor, "|", 2)
+		if len(parts) == 2 {
+			tsArg := addArg(parts[0])
+			idArg := addArg(parts[1])
+			clauses = append(clauses, "(created_at, id) < ("+tsArg+"::timestamptz, "+idArg+")")
+		}
 	}
 
 	query := `
@@ -85,7 +91,7 @@ func (r *PostgresNotificationLogRepository) List(ctx context.Context, opts domai
 		       sent_at, created_at
 		FROM customer_notification_logs
 		WHERE ` + strings.Join(clauses, " AND ") + `
-		ORDER BY created_at DESC, id
+		ORDER BY created_at DESC, id DESC
 		LIMIT ` + addArg(limit+1)
 
 	rows, err := r.db.Query(ctx, query, args...)
@@ -104,9 +110,6 @@ func (r *PostgresNotificationLogRepository) List(ctx context.Context, opts domai
 			&l.TemplateKey, &status, &l.ExternalID, &l.FailureReason,
 			&sentAt, &l.CreatedAt,
 		); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				break
-			}
 			return nil, "", err
 		}
 		l.Channel = domain.Channel(ch)
@@ -120,7 +123,8 @@ func (r *PostgresNotificationLogRepository) List(ctx context.Context, opts domai
 
 	var nextCursor string
 	if len(logs) > limit {
-		nextCursor = logs[limit].ID
+		last := logs[limit]
+		nextCursor = last.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + last.ID
 		logs = logs[:limit]
 	}
 	return logs, nextCursor, nil

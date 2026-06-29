@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><title>Rappel de paiement — {{.TenantAppName}}</title></head>
+<body style="font-family:sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  {{if .TenantLogoURL}}<img src="{{.TenantLogoURL}}" alt="{{.TenantAppName}}" style="max-height:60px;margin-bottom:20px"><br>{{end}}
+  <h2 style="color:{{if .TenantPrimaryColor}}{{.TenantPrimaryColor}}{{else}}#000{{end}}">Rappel de paiement</h2>
+  <p>Bonjour {{.CustomerFirstName}},</p>
+  <p>Un paiement de <strong>{{.InvoiceAmount}} {{.InvoiceCurrency}}</strong> est en attente sur votre compte.</p>
+  <p>Veuillez régulariser votre situation dès que possible.</p>
+  {{if .SupportEmail}}<p>Questions ? <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a></p>{{end}}
+</body>
+</html>
