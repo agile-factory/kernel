@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
-	auditusecase "github.com/agile-factory/kernel/platform/audit/usecase"
+	"github.com/agile-factory/kernel/platform/audit"
 	authdomain "github.com/agile-factory/kernel/platform/auth/domain"
 	"github.com/agile-factory/kernel/platform/auth/usecase"
 )
@@ -102,24 +101,13 @@ func (m *mockTokenGenerator) GenerateToken(user *authdomain.User) (string, error
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-func newAuditUseCase() *auditusecase.LogEventUseCase {
-	return auditusecase.NewLogEventUseCase(&mockAuditRepo{})
-}
+// noopAuditLogger is a test double for audit.EventLogger that discards all events.
+type noopAuditLogger struct{}
 
-type mockAuditRepo struct{}
+func (n *noopAuditLogger) Execute(_ context.Context, _ audit.LogEventParams) {}
 
-func (m *mockAuditRepo) Save(ctx context.Context, log *auditdomain.AuditLog) error { return nil }
-func (m *mockAuditRepo) ListByTenant(ctx context.Context, tenantID string, limit, offset int) ([]*auditdomain.AuditLog, error) {
-	return nil, nil
-}
-func (m *mockAuditRepo) ListAll(ctx context.Context, limit, offset int) ([]*auditdomain.AuditLog, error) {
-	return nil, nil
-}
-func (m *mockAuditRepo) ListByTenantCursor(ctx context.Context, tenantID string, limit int, after *auditdomain.CursorToken) ([]*auditdomain.AuditLog, error) {
-	return nil, nil
-}
-func (m *mockAuditRepo) ListAllCursor(ctx context.Context, limit int, after *auditdomain.CursorToken) ([]*auditdomain.AuditLog, error) {
-	return nil, nil
+func newAuditUseCase() audit.EventLogger {
+	return &noopAuditLogger{}
 }
 
 func newLoginUC(repo *mockUserRepo, refresh *mockRefreshTokenRepo, verifier *mockVerifier, gen *mockTokenGenerator) *usecase.LoginUseCase {

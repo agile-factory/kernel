@@ -19,14 +19,15 @@ const (
 
 // AuditLog is an immutable record of a single audited event.
 type AuditLog struct {
-	ID         string
-	TenantID   string         // empty when not tenant-scoped
-	ActorID    string         // empty for system events
-	Action     AuditAction
-	TargetType string         // e.g. "membership", "user", "tenant"
-	TargetID   string         // UUID of the affected resource
-	Metadata   map[string]any // extra context (role, email, …)
-	OccurredAt time.Time
+	ID            string
+	TenantID      string         // empty when not tenant-scoped
+	ActorID       string         // empty for system events
+	Action        AuditAction
+	TargetType    string         // e.g. "membership", "user", "tenant"
+	TargetID      string         // UUID of the affected resource
+	Metadata      map[string]any // extra context (role, email, …)
+	OccurredAt    time.Time
+	OutboxEventID string // outbox row UUID; empty for pre-outbox rows; used for deduplication
 }
 
 // NewAuditLog constructs an AuditLog with OccurredAt set to now.

@@ -2,55 +2,89 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
-	"github.com/agile-factory/kernel/platform/audit/domain"
-	"github.com/google/uuid"
+	"github.com/agile-factory/kernel/kernel/events"
+	"github.com/agile-factory/kernel/kernel/txctx"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// auditWriteTimeout caps how long a single fire-and-forget Save may run after
-// the originating request returns. Long enough to absorb a transient pool wait,
-// short enough that pathological writes don't pile up forever.
-const auditWriteTimeout = 5 * time.Second
-
-// LogEventUseCase persists a single audit log entry.
-// It is intentionally fire-and-forget: callers MUST NOT branch on its error.
-type LogEventUseCase struct {
-	repo domain.AuditRepository
+// auditLogPayload is the typed contract stored in the event_outbox payload.
+// Using a typed struct (rather than ad-hoc map helpers) ensures the publisher
+// and consumer agree on field names and types at compile time.
+type auditLogPayload struct {
+	TenantID   string         `json:"tenant_id"`
+	ActorID    string         `json:"actor_id"`
+	Action     string         `json:"action"`
+	TargetType string         `json:"target_type"`
+	TargetID   string         `json:"target_id"`
+	Metadata   map[string]any `json:"metadata"`
+	OccurredAt time.Time      `json:"occurred_at"`
 }
 
-func NewLogEventUseCase(repo domain.AuditRepository) *LogEventUseCase {
-	return &LogEventUseCase{
-		repo: repo,
+// LogEventUseCase publishes an audit event to the outbox bus.
+// Execute does not return an error: callers MUST NOT branch on audit success.
+// Publish failures are logged; the business operation is never blocked.
+type LogEventUseCase struct {
+	db        *pgxpool.Pool
+	publisher events.Publisher
+}
+
+// NewLogEventUseCase creates a LogEventUseCase backed by the outbox publisher.
+func NewLogEventUseCase(db *pgxpool.Pool, publisher events.Publisher) *LogEventUseCase {
+	return &LogEventUseCase{db: db, publisher: publisher}
+}
+
+// Execute publishes the audit event to event_outbox in a dedicated transaction.
+// The at-least-once dispatcher (RFC-0015) delivers it to ConsumeAuditLogUseCase,
+// which persists it to audit_logs with ON CONFLICT (outbox_event_id) DO NOTHING.
+func (uc *LogEventUseCase) Execute(ctx context.Context, params LogEventParams) {
+	payload := auditLogPayload{
+		TenantID:   params.TenantID,
+		ActorID:    params.ActorID,
+		Action:     string(params.Action),
+		TargetType: params.TargetType,
+		TargetID:   params.TargetID,
+		Metadata:   params.Metadata,
+		OccurredAt: time.Now().UTC(),
+	}
+
+	err := txctx.ExecInTx(ctx, uc.db, func(ctx context.Context) error {
+		m, err := toPayloadMap(payload)
+		if err != nil {
+			return err
+		}
+		return uc.publisher.Publish(ctx, events.Event{
+			Type:    "audit.log_created",
+			Payload: m,
+			Meta: events.EventMeta{
+				TenantID:   params.TenantID,
+				ActorID:    params.ActorID,
+				OccurredAt: payload.OccurredAt,
+			},
+		})
+	})
+	if err != nil {
+		slog.Error("audit: outbox publish failed",
+			"error", err,
+			"action", params.Action,
+			"tenant_id", params.TenantID,
+		)
 	}
 }
 
-// Execute persists the audit event without blocking the caller's request path.
-// The save uses a context derived from the caller's context (preserving values
-// such as request ID / trace ID) but with cancellation detached, so the write
-// is not aborted when the HTTP handler returns.
-func (uc *LogEventUseCase) Execute(ctx context.Context, params LogEventParams) {
-	log := domain.NewAuditLog(
-		uuid.NewString(),
-		params.TenantID,
-		params.ActorID,
-		params.Action,
-		params.TargetType,
-		params.TargetID,
-		params.Metadata,
-	)
-
-	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), auditWriteTimeout)
-	go func() {
-		defer cancel()
-		if err := uc.repo.Save(bgCtx, log); err != nil {
-			slog.Error("audit: best-effort save failed",
-				"error", err,
-				"tenant_id", params.TenantID,
-				"actor_id", params.ActorID,
-				"action", params.Action,
-			)
-		}
-	}()
+// toPayloadMap JSON-round-trips the typed struct to map[string]any so it can
+// be stored in events.Event.Payload (which is map[string]any by contract).
+func toPayloadMap(p auditLogPayload) (map[string]any, error) {
+	b, err := json.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }

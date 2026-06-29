@@ -18,9 +18,10 @@ func NewPostgresAuditRepository(db *pgxpool.Pool) *PostgresAuditRepository {
 	return &PostgresAuditRepository{db: db}
 }
 
-// Save persists an AuditLog. This is designed to be best-effort;
-// any database error is wrapped but should typically be logged, not propagated
-// to fail a broader business transaction unless specifically required.
+// Save persists an AuditLog. When log.OutboxEventID is set the INSERT uses
+// ON CONFLICT (outbox_event_id) DO NOTHING, making at-least-once consumer
+// deliveries idempotent. When OutboxEventID is empty, NULLIF converts it to
+// NULL so the UNIQUE constraint does not apply.
 func (r *PostgresAuditRepository) Save(ctx context.Context, log *domain.AuditLog) error {
 	_, err := r.db.Exec(ctx, queryInsertAuditLog,
 		log.ID,
@@ -31,6 +32,7 @@ func (r *PostgresAuditRepository) Save(ctx context.Context, log *domain.AuditLog
 		log.TargetID,
 		log.Metadata,
 		log.OccurredAt,
+		log.OutboxEventID, // empty string → NULL via NULLIF in SQL
 	)
 	if err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrAuditSaveFailed, err)

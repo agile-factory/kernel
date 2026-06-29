@@ -170,6 +170,7 @@ func (d *OutboxDispatcher) fetchBatch(ctx context.Context, tx pgx.Tx) ([]pending
 		batch = append(batch, pendingEvent{
 			id: id,
 			event: Event{
+				ID:      id,
 				Type:    eventType,
 				Payload: payloadMap,
 				Meta:    metaPayload,

@@ -5,8 +5,9 @@ const (
 
 	queryInsertAuditLog = `
 		INSERT INTO audit_logs
-		      (id, tenant_id, actor_id, action, target_type, target_id, metadata, occurred_at)
-		VALUES ($1, NULLIF($2,'')::uuid, NULLIF($3,'')::uuid, $4, $5, NULLIF($6,'')::uuid, $7, $8)
+		      (id, tenant_id, actor_id, action, target_type, target_id, metadata, occurred_at, outbox_event_id)
+		VALUES ($1, NULLIF($2,'')::uuid, NULLIF($3,'')::uuid, $4, $5, NULLIF($6,'')::uuid, $7, $8, NULLIF($9,'')::uuid)
+		ON CONFLICT (outbox_event_id) DO NOTHING
 	`
 
 	queryListByTenant = `

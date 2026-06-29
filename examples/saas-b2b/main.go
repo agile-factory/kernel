@@ -116,15 +116,20 @@ func main() {
 	notifLogRepo := notifinfra.NewPostgresNotificationLogRepository(db)
 
 	// ── Modules ──────────────────────────────────────────────────────────────
-	// The audit Module currently uses best-effort direct injection (ADR-0009
-	// — DEPRECATED). The events Bus is wired in but not yet consumed by
-	// audit; that migration happens in P1-3 and will replace EventLogger()
-	// with an outbox-backed handler.
-	auditMod := audit.New(audit.Config{
+	// The audit Module uses the outbox at-least-once pattern (RFC-0040 /
+	// ADR-0020). LogEventUseCase publishes to event_outbox; the consumer
+	// is registered via auditMod.Subscribe(bus) below.
+	auditMod, err := audit.New(audit.Config{
+		DB:             db,
 		Repo:           auditRepo,
 		MembershipRepo: memberRepo,
+		Publisher:      bus.Publisher(),
 		Logger:         log,
 	})
+	if err != nil {
+		slog.Error("Failed to initialise audit module", "error", err)
+		os.Exit(1)
+	}
 
 	tenantMod := tenant.New(tenant.Config{
 		Pool:           db,
@@ -178,7 +183,8 @@ func main() {
 		slog.Error("Failed to initialise notification module", "error", err)
 		os.Exit(1)
 	}
-	notifMod.Subscribe(bus) // register handlers before bus.Run starts.
+	auditMod.Subscribe(bus)  // audit.log_created → audit_logs (at-least-once, RFC-0040)
+	notifMod.Subscribe(bus)  // register handlers before bus.Run starts.
 
 	// ── User profile module (P1-2) ───────────────────────────────────────────
 	profileRepo := userinfra.NewPostgresUserProfileRepository(db)

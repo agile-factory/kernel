@@ -43,7 +43,11 @@ import (
 var Migrations embed.FS
 
 // Event is the unit published to the outbox.
+// ID is populated by the dispatcher (outbox row UUID) before handlers are
+// invoked; it is empty when the event is first constructed by a publisher.
+// Handlers may use it as a deduplication key.
 type Event struct {
+	ID      string         `json:"id,omitempty"`
 	Type    string         `json:"type"`
 	Payload map[string]any `json:"payload"`
 	Meta    EventMeta      `json:"meta"`

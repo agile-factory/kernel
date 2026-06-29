@@ -4,20 +4,22 @@
 //
 // Consumers should depend on the EventLogger interface rather than the
 // concrete *usecase.LogEventUseCase, so the audit implementation can evolve
-// (e.g. swap best-effort fire-and-forget for the outbox pattern in RFC-0015)
 // without breaking dependent platforms.
 package audit
 
 import (
 	"context"
 	"embed"
+	"errors"
 	"log/slog"
 	"net/http"
 
+	"github.com/agile-factory/kernel/kernel/events"
 	audithttp "github.com/agile-factory/kernel/platform/audit/delivery/http"
 	"github.com/agile-factory/kernel/platform/audit/domain"
 	"github.com/agile-factory/kernel/platform/audit/usecase"
 	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Migrations holds the SQL files this platform owns. Consumers compose them
@@ -36,13 +38,13 @@ type EventLogger interface {
 	Execute(ctx context.Context, params LogEventParams)
 }
 
-// Config captures the dependencies required by the audit Module. Repos are
-// constructed outside the module so platforms can share a single repo
-// instance and avoid a construction cycle (audit needs a membership reader
-// for HTTP perm checks, while membership use cases need audit.EventLogger).
+// Config captures the dependencies required by the audit Module. All fields
+// are mandatory — New returns an error if any are nil.
 type Config struct {
+	DB             *pgxpool.Pool                     // dedicated tx for outbox publish
 	Repo           domain.AuditRepository
 	MembershipRepo memberdomain.MembershipRepository
+	Publisher      events.Publisher                  // outbox publisher (RFC-0015)
 	Logger         *slog.Logger
 }
 
@@ -50,31 +52,62 @@ type Config struct {
 type Module struct {
 	cfg Config
 
-	LogEventUC *usecase.LogEventUseCase
-	ListUC     *usecase.ListAuditLogsUseCase
+	logUC     *usecase.LogEventUseCase
+	consumeUC *usecase.ConsumeAuditLogUseCase
+	ListUC    *usecase.ListAuditLogsUseCase
 
 	handler   *audithttp.AuditHandler
 	handlerV2 *audithttp.AuditHandlerV2
 }
 
 // New wires the audit module's internal components.
-func New(cfg Config) *Module {
-	logUC := usecase.NewLogEventUseCase(cfg.Repo)
+// Returns an error if any required Config field is nil.
+func New(cfg Config) (*Module, error) {
+	var errs []error
+	if cfg.DB == nil {
+		errs = append(errs, errors.New("audit.Config: DB is required"))
+	}
+	if cfg.Repo == nil {
+		errs = append(errs, errors.New("audit.Config: Repo is required"))
+	}
+	if cfg.MembershipRepo == nil {
+		errs = append(errs, errors.New("audit.Config: MembershipRepo is required"))
+	}
+	if cfg.Publisher == nil {
+		errs = append(errs, errors.New("audit.Config: Publisher is required"))
+	}
+	if cfg.Logger == nil {
+		errs = append(errs, errors.New("audit.Config: Logger is required"))
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	logUC := usecase.NewLogEventUseCase(cfg.DB, cfg.Publisher)
+	consumeUC := usecase.NewConsumeAuditLogUseCase(cfg.Repo)
 	listUC := usecase.NewListAuditLogsUseCase(cfg.Repo)
 
 	return &Module{
-		cfg:        cfg,
-		LogEventUC: logUC,
-		ListUC:     listUC,
-		handler:    audithttp.NewAuditHandler(listUC, cfg.MembershipRepo),
-		handlerV2:  audithttp.NewAuditHandlerV2(listUC, cfg.MembershipRepo),
-	}
+		cfg:       cfg,
+		logUC:     logUC,
+		consumeUC: consumeUC,
+		ListUC:    listUC,
+		handler:   audithttp.NewAuditHandler(listUC, cfg.MembershipRepo),
+		handlerV2: audithttp.NewAuditHandlerV2(listUC, cfg.MembershipRepo),
+	}, nil
 }
 
 // EventLogger returns the audit producer contract satisfied by this module.
 // Other platforms wire this into their own Config.
 func (m *Module) EventLogger() EventLogger {
-	return m.LogEventUC
+	return m.logUC
+}
+
+// Subscribe registers the audit consumer with the events bus.
+// Call before bus.Run to ensure audit.log_created events are delivered to
+// audit_logs with at-least-once guarantees.
+func (m *Module) Subscribe(sub events.Subscriber) {
+	sub.Subscribe("audit.log_created", m.consumeUC.Handle)
 }
 
 // RegisterRoutes mounts the audit HTTP endpoints on the provided mux.

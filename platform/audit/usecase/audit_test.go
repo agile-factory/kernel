@@ -3,29 +3,23 @@ package usecase_test
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/agile-factory/kernel/kernel/events"
 	"github.com/agile-factory/kernel/platform/audit/domain"
 	"github.com/agile-factory/kernel/platform/audit/usecase"
 )
 
 // ─── Mock AuditRepository ─────────────────────────────────────────────────────
 
-// mockAuditRepo is concurrency-safe because LogEventUseCase.Execute runs Save
-// in a goroutine (fire-and-forget), so tests assert state from a different
-// goroutine than the writer.
 type mockAuditRepo struct {
-	mu      sync.Mutex
 	logs    []*domain.AuditLog
 	saveErr error
 	listErr error
 }
 
-func (m *mockAuditRepo) Save(ctx context.Context, log *domain.AuditLog) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *mockAuditRepo) Save(_ context.Context, log *domain.AuditLog) error {
 	if m.saveErr != nil {
 		return m.saveErr
 	}
@@ -33,28 +27,7 @@ func (m *mockAuditRepo) Save(ctx context.Context, log *domain.AuditLog) error {
 	return nil
 }
 
-// logCount returns the current number of saved logs under the mutex.
-func (m *mockAuditRepo) logCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.logs)
-}
-
-// waitForLogs polls until the repo holds at least n logs or the timeout fires.
-// Used by tests to wait on the goroutine spawned by LogEventUseCase.Execute.
-func (m *mockAuditRepo) waitForLogs(t *testing.T, n int, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if m.logCount() >= n {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("expected %d log(s) saved within %s, got %d", n, timeout, m.logCount())
-}
-
-func (m *mockAuditRepo) ListByTenant(ctx context.Context, tenantID string, limit, offset int) ([]*domain.AuditLog, error) {
+func (m *mockAuditRepo) ListByTenant(_ context.Context, tenantID string, limit, offset int) ([]*domain.AuditLog, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -64,7 +37,6 @@ func (m *mockAuditRepo) ListByTenant(ctx context.Context, tenantID string, limit
 			result = append(result, l)
 		}
 	}
-	// Apply offset + limit
 	if offset >= len(result) {
 		return []*domain.AuditLog{}, nil
 	}
@@ -75,7 +47,7 @@ func (m *mockAuditRepo) ListByTenant(ctx context.Context, tenantID string, limit
 	return result, nil
 }
 
-func (m *mockAuditRepo) ListAll(ctx context.Context, limit, offset int) ([]*domain.AuditLog, error) {
+func (m *mockAuditRepo) ListAll(_ context.Context, limit, offset int) ([]*domain.AuditLog, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -91,7 +63,7 @@ func (m *mockAuditRepo) ListAll(ctx context.Context, limit, offset int) ([]*doma
 	return result, nil
 }
 
-func (m *mockAuditRepo) ListByTenantCursor(ctx context.Context, tenantID string, limit int, after *domain.CursorToken) ([]*domain.AuditLog, error) {
+func (m *mockAuditRepo) ListByTenantCursor(_ context.Context, tenantID string, limit int, after *domain.CursorToken) ([]*domain.AuditLog, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -101,7 +73,6 @@ func (m *mockAuditRepo) ListByTenantCursor(ctx context.Context, tenantID string,
 			continue
 		}
 		if after != nil {
-			// Keyset: occurred_at < after.OccurredAt OR (occurred_at == after.OccurredAt AND id > after.ID)
 			if l.OccurredAt.After(after.OccurredAt) {
 				continue
 			}
@@ -117,7 +88,7 @@ func (m *mockAuditRepo) ListByTenantCursor(ctx context.Context, tenantID string,
 	return result, nil
 }
 
-func (m *mockAuditRepo) ListAllCursor(ctx context.Context, limit int, after *domain.CursorToken) ([]*domain.AuditLog, error) {
+func (m *mockAuditRepo) ListAllCursor(_ context.Context, limit int, after *domain.CursorToken) ([]*domain.AuditLog, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
@@ -164,56 +135,89 @@ func populatedRepo(n int, tenantID string) *mockAuditRepo {
 	return repo
 }
 
-// ─── LogEventUseCase ─────────────────────────────────────────────────────────
+// ─── ConsumeAuditLogUseCase ────────────────────────────────────────────────────
 
-func TestLogEvent_SavesSuccessfully(t *testing.T) {
+func TestConsumeAuditLog_PersistsLog(t *testing.T) {
 	repo := &mockAuditRepo{}
-	uc := usecase.NewLogEventUseCase(repo)
+	uc := usecase.NewConsumeAuditLogUseCase(repo)
 
-	uc.Execute(context.Background(), usecase.LogEventParams{
-		TenantID:   "tenant-001",
-		ActorID:    "user-001",
-		Action:     domain.ACTION_USER_REGISTERED,
-		TargetType: "user",
-		TargetID:   "user-001",
-		Metadata:   map[string]any{"email": "alice@agile.io"},
-	})
+	ev := events.Event{
+		ID:   "outbox-uuid-001",
+		Type: "audit.log_created",
+		Payload: map[string]any{
+			"tenant_id":   "tenant-001",
+			"actor_id":    "user-001",
+			"action":      "USER_LOGGED_IN",
+			"target_type": "user",
+			"target_id":   "user-001",
+			"metadata":    map[string]any{"ip": "127.0.0.1"},
+			"occurred_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+		Meta: events.EventMeta{TenantID: "tenant-001"},
+	}
 
-	// Save runs in a goroutine (fire-and-forget) — wait for it to land.
-	repo.waitForLogs(t, 1, time.Second)
+	if err := uc.Handle(context.Background(), ev); err != nil {
+		t.Fatalf("Handle() unexpected error: %v", err)
+	}
+	if len(repo.logs) != 1 {
+		t.Fatalf("expected 1 log saved, got %d", len(repo.logs))
+	}
+	got := repo.logs[0]
+	if got.TenantID != "tenant-001" {
+		t.Errorf("TenantID: want tenant-001, got %s", got.TenantID)
+	}
+	if got.Action != domain.ACTION_USER_LOGGED_IN {
+		t.Errorf("Action: want USER_LOGGED_IN, got %s", got.Action)
+	}
+	if got.OutboxEventID != "outbox-uuid-001" {
+		t.Errorf("OutboxEventID: want outbox-uuid-001, got %s", got.OutboxEventID)
+	}
 }
 
-func TestLogEvent_FireAndForget_NoError(t *testing.T) {
-	// Même si le repo échoue, LogEvent ne doit pas paniquer ni retourner d'erreur.
+func TestConsumeAuditLog_IdempotentOnSaveError(t *testing.T) {
+	// When repo.Save returns an error, Handle surfaces it so the dispatcher
+	// can retry. The duplicate will be silently discarded on a successful
+	// retry via ON CONFLICT (outbox_event_id) DO NOTHING in SQL.
 	repo := &mockAuditRepo{saveErr: fmt.Errorf("db: connection refused")}
-	uc := usecase.NewLogEventUseCase(repo)
+	uc := usecase.NewConsumeAuditLogUseCase(repo)
 
-	// Ne doit pas paniquer (l'erreur du Save est avalée et journalisée).
-	uc.Execute(context.Background(), usecase.LogEventParams{
-		TenantID: "tenant-001",
-		ActorID:  "user-001",
-		Action:   domain.ACTION_USER_LOGGED_IN,
-	})
-	// Laisse la goroutine se terminer pour éviter une fuite entre tests.
-	time.Sleep(20 * time.Millisecond)
+	ev := events.Event{
+		ID:   "outbox-uuid-002",
+		Type: "audit.log_created",
+		Payload: map[string]any{
+			"tenant_id":   "tenant-001",
+			"actor_id":    "user-001",
+			"action":      "USER_REGISTERED",
+			"occurred_at": time.Now().UTC().Format(time.RFC3339Nano),
+		},
+	}
+
+	if err := uc.Handle(context.Background(), ev); err == nil {
+		t.Error("Handle() expected error on repo failure, got nil")
+	}
 }
 
-func TestLogEvent_DetachesFromRequestContext(t *testing.T) {
-	// Simulate a cancelled request context: the audit save MUST still proceed
-	// because LogEventUseCase derives a context.WithoutCancel from it.
+func TestConsumeAuditLog_EmptyMetadataDefaultsToMap(t *testing.T) {
 	repo := &mockAuditRepo{}
-	uc := usecase.NewLogEventUseCase(repo)
+	uc := usecase.NewConsumeAuditLogUseCase(repo)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // pre-cancel before the call
-
-	uc.Execute(ctx, usecase.LogEventParams{
-		TenantID: "tenant-001",
-		ActorID:  "user-001",
-		Action:   domain.ACTION_USER_LOGGED_IN,
-	})
-
-	repo.waitForLogs(t, 1, time.Second)
+	ev := events.Event{
+		ID:   "outbox-uuid-003",
+		Type: "audit.log_created",
+		Payload: map[string]any{
+			"tenant_id":   "t-1",
+			"actor_id":    "u-1",
+			"action":      "TENANT_CREATED",
+			"occurred_at": time.Now().UTC().Format(time.RFC3339Nano),
+			// metadata field absent
+		},
+	}
+	if err := uc.Handle(context.Background(), ev); err != nil {
+		t.Fatalf("Handle() unexpected error: %v", err)
+	}
+	if repo.logs[0].Metadata == nil {
+		t.Error("Metadata should default to empty map, got nil")
+	}
 }
 
 // ─── ListAuditLogsUseCase — v1 Offset ─────────────────────────────────────────
@@ -232,7 +236,6 @@ func TestByTenant_ReturnsCorrectLogs(t *testing.T) {
 }
 
 func TestByTenant_DefaultLimit(t *testing.T) {
-	// Limit = 0 doit être ramenée à 50.
 	repo := populatedRepo(10, "tenant-001")
 	uc := usecase.NewListAuditLogsUseCase(repo)
 
@@ -240,14 +243,12 @@ func TestByTenant_DefaultLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ByTenant() error: %v", err)
 	}
-	// Le repo mock retourne tous les logs du tenant (10), limit 50 les garde tous.
 	if len(logs) != 10 {
 		t.Errorf("expected 10 logs (all), got %d", len(logs))
 	}
 }
 
 func TestByTenant_MaxLimitCapped(t *testing.T) {
-	// Limit > 200 doit être ramenée à 200.
 	repo := populatedRepo(10, "tenant-001")
 	uc := usecase.NewListAuditLogsUseCase(repo)
 
@@ -275,7 +276,6 @@ func TestByTenant_OffsetPagination(t *testing.T) {
 
 func TestByTenant_DifferentTenantsIsolated(t *testing.T) {
 	repo := populatedRepo(5, "tenant-001")
-	// Ajouter des logs pour tenant-002
 	for i := 0; i < 3; i++ {
 		repo.logs = append(repo.logs, makeLog(
 			fmt.Sprintf("other-%03d", i), "tenant-002",
