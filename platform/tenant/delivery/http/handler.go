@@ -94,11 +94,11 @@ func (h *TenantHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, toTenantResponse(tenant))
 }
 
-// GetBySlug handles GET /api/v1/tenants/slug/{slug}.
+// GetBySlug handles GET /api/v1/tenants/by-slug?slug={slug}.
 func (h *TenantHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
-	slug := r.PathValue("slug")
+	slug := r.URL.Query().Get("slug")
 	if slug == "" {
-		response.Error(w, errors.BadRequest("slug is required"))
+		response.Error(w, errors.BadRequest("slug query parameter is required"))
 		return
 	}
 	tenant, err := h.findUC.BySlug(r.Context(), slug)
