@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>New team member</title></head>
+<body style="font-family:sans-serif;color:#1a1a1a;max-width:560px;margin:0 auto;padding:32px 16px">
+  <h2 style="font-size:20px;font-weight:600;margin-bottom:8px">👋 {{.InviteeName}} joined {{.TenantName}}</h2>
+  <p style="margin:0 0 16px">
+    Hi {{.InviterName}},<br><br>
+    <strong>{{.InviteeName}}</strong> ({{.InviteeEmail}}) has accepted your invitation and is now a member of
+    <strong>{{.TenantName}}</strong> with the <em>{{.Role}}</em> role.
+  </p>
+  <a href="{{.TeamURL}}"
+     style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px">
+    View your team
+  </a>
+  <p style="margin-top:32px;font-size:12px;color:#71717a">
+    You received this email because you invited {{.InviteeEmail}} to {{.TenantName}}.
+  </p>
+</body>
+</html>

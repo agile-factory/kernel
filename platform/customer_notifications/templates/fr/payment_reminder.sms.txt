@@ -1,0 +1,1 @@
+{{.TenantAppName}} — Rappel : paiement de {{.InvoiceAmount}} {{.InvoiceCurrency}} en attente. Merci de régulariser, {{.CustomerFirstName}}.

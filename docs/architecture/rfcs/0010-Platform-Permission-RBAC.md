@@ -4,7 +4,9 @@
 
 ---
 
-## **Status:** `PROPOSED`
+## **Status:** `PROPOSED — EN ATTENTE DE VALIDATION (Aziz / Lucas)`
+
+> **Amendement 2026-06-28 (Cheikh)** : Questions ouvertes résolues ci-dessous. Scope v1 simplifié pour éviter la dette technique. Soumis pour revue avant implémentation P1.
 
 ---
 
@@ -143,11 +145,62 @@ Un système de permissions trop granulaire devient difficile à gérer pour les 
 
 ---
 
-## **Open Questions**
+## **Open Questions — RÉSOLUES (amendement 2026-06-28)**
 
-1. Les rôles personnalisés sont-ils créés par les admins via UI ou pré-définis dans le code du module ?
-2. Faut-il un audit des changements de permissions (RFC-0005) ?
-3. Cache côté application ou cache Redis partagé ?
+### Q1 : Création des rôles personnalisés — UI admin vs code ?
+
+**Réponse : code-defined uniquement en v1, UI-configurable en v2.**
+
+Raisonnement : aucune UI d'administration n'existe encore. Autoriser la création de rôles via l'API sans UI de gestion crée une surface de sécurité non maîtrisée. Les SaaS consommateurs déclarent leurs rôles métier dans leur `main.go` via `SeedRoles([]permission.RoleDefinition{...})` au démarrage. La migration vers des rôles configurables via UI est différée à v2, lorsqu'un vrai cas d'usage le justifie.
+
+### Q2 : Audit des changements de permissions ?
+
+**Réponse : oui, via RFC-0005 (audit trail existant), événements `permission.role_assigned` et `permission.role_revoked`.**
+
+Les changements d'attribution de rôle sont des événements de sécurité critiques. Ils doivent être tracés dans `audit_logs` avec `actor_id`, `target_user_id`, `role_id`, `tenant_id`. L'implémentation réutilise le `AuditLogger` (interface RFC-0005) déjà injecté dans les modules.
+
+### Q3 : Cache — application ou Redis ?
+
+**Réponse : in-memory par requête (no-op cache en v1), Redis différé à v2.**
+
+Ajouter Redis comme dépendance opérationnelle en P1 augmente la charge d'infrastructure sans gain mesuré (les SaaS P1 auront <1000 req/s). La stratégie v1 :
+- `PermissionChecker` charge les rôles une seule fois par requête (lazy, via context)
+- Pas de cache cross-requête
+- Si les benchmarks P1 montrent une régression, Redis est ajouté en v2 comme backend optionnel du `PermissionChecker`
+
+---
+
+## **Recommandation de scope v1 — SIMPLIFICATION ANTI-DETTE TECHNIQUE**
+
+> **Alerte prudence** : le schéma SQL proposé (3 nouvelles tables : `roles`, `role_permissions`, `user_roles`) introduit une complexité significative pour un besoin non encore prouvé par les SaaS consommateurs.
+
+### Scope v1 recommandé (sans les 3 tables)
+
+**Phase v1 :** `PermissionChecker` interface uniquement, branché sur `membership.role`
+
+```go
+// kernel/permission/checker.go — AUCUNE nouvelle table SQL
+type PermissionChecker interface {
+    Can(ctx context.Context, userID, tenantID string, perm Permission) (bool, error)
+}
+
+// Implémentation v1 : lit depuis membership.role (déjà en DB)
+type MembershipBasedChecker struct {
+    memberRepo membership.Repository
+}
+
+func (c *MembershipBasedChecker) Can(ctx context.Context, userID, tenantID string, perm Permission) (bool, error) {
+    member, err := c.memberRepo.GetByUserAndTenant(ctx, userID, tenantID)
+    if err != nil { return false, err }
+    return roleHasPermission(member.Role, perm), nil
+}
+```
+
+**Phase v2 :** Ajout des tables `roles`, `role_permissions`, `user_roles` quand un SaaS consommateur a un besoin réel de rôles personnalisés.
+
+**Critère de déclenchement v2 :** au moins un SaaS consommateur soumit une issue GitHub avec un cas d'usage concret de rôle personnalisé.
+
+Cette approche suit le principe **YAGNI** (You Aren't Gonna Need It) et évite de livrer de la complexité préventive.
 
 ---
 
