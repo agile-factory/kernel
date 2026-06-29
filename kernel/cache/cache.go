@@ -59,9 +59,11 @@ func (e entry) expired() bool {
 }
 
 // InMemoryCache is a goroutine-safe in-memory cache backed by sync.Map.
-// Call Stop() to release the background GC goroutine.
+// Call Stop() to release the background GC goroutine. Stop is idempotent
+// and safe to call multiple times (e.g. via defer).
 type InMemoryCache struct {
 	m    sync.Map
+	once sync.Once
 	stop chan struct{}
 }
 
@@ -99,9 +101,10 @@ func (c *InMemoryCache) gc(interval time.Duration) {
 	}
 }
 
-// Stop shuts down the background GC goroutine. It is safe to call once.
+// Stop shuts down the background GC goroutine. It is idempotent — safe to
+// call multiple times or from multiple goroutines.
 func (c *InMemoryCache) Stop() {
-	close(c.stop)
+	c.once.Do(func() { close(c.stop) })
 }
 
 // Get implements Cache.

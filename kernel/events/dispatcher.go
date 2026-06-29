@@ -283,12 +283,13 @@ WHERE id = $3
 `
 
 // backoff returns the delay before the next retry, doubling each attempt
-// up to a hard cap (5 minutes per RFC-0015 v1.1).
+// up to a hard cap of 5 minutes (RFC-0015 v1.1).
+// Exponent is capped at 9 so 1<<9 = 512s → clamped to 300s = 5min.
 func backoff(attempts int) time.Duration {
 	const maxBackoff = 5 * time.Minute
 	exp := attempts
-	if exp > 8 {
-		exp = 8
+	if exp > 9 {
+		exp = 9
 	}
 	d := time.Duration(1<<exp) * time.Second
 	if d > maxBackoff {
