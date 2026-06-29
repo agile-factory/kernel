@@ -1,0 +1,12 @@
+services:
+  kernel-docs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kernel-docs:latest
+    container_name: kernel-docs
+    restart: unless-stopped
+    ports:
+      - "3035:3000"
+    environment:
+      NODE_ENV: production

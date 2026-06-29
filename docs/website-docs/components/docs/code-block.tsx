@@ -33,15 +33,24 @@ export async function CodeBlock({
         className,
       )}
     >
-      <figcaption className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2">
-        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          {filename ? (
-            <span className="font-mono text-foreground">{filename}</span>
-          ) : (
-            <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-primary">
-              {langLabels[lang]}
-            </span>
-          )}
+      <figcaption className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          {/* macOS-style traffic lights */}
+          <div className="flex items-center gap-1.5" aria-hidden="true">
+            <span className="size-2.5 rounded-full bg-[#ff5f57]" />
+            <span className="size-2.5 rounded-full bg-[#febc2e]" />
+            <span className="size-2.5 rounded-full bg-[#28c840]" />
+          </div>
+          <div className="h-3.5 w-px bg-border" aria-hidden="true" />
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            {filename ? (
+              <span className="font-mono text-foreground">{filename}</span>
+            ) : (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-primary">
+                {langLabels[lang]}
+              </span>
+            )}
+          </div>
         </div>
         <CopyButton value={code.trim()} />
       </figcaption>

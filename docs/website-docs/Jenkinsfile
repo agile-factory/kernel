@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+
+    environment {
+        COMPOSE_FILE = 'docker-compose.yml'
+        APP_DIR      = 'docs/website-docs'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build image') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'docker compose build --no-cache kernel-docs'
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'docker compose up -d kernel-docs'
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo 'Pipeline failed — rolling back to previous container.'
+            dir("${APP_DIR}") {
+                sh 'docker compose restart kernel-docs || true'
+            }
+        }
+        success {
+            echo 'kernel-docs deployed at http://localhost:3000'
+        }
+    }
+}

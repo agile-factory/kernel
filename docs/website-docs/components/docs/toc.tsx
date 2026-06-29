@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ArrowUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type TocItem = { id: string; title: string; level: 2 | 3 }
@@ -31,19 +32,19 @@ export function TableOfContents({ items }: { items: TocItem[] }) {
   if (items.length === 0) return null
 
   return (
-    <nav aria-label="On this page" className="text-sm">
-      <p className="mb-3 font-semibold text-foreground">On this page</p>
+    <nav aria-label="On this page" className="flex flex-col gap-4 text-sm">
+      <p className="font-semibold text-foreground">On this page</p>
       <ul className="space-y-1 border-l border-border">
         {items.map((item) => (
           <li key={item.id}>
             <a
               href={`#${item.id}`}
               className={cn(
-                '-ml-px block border-l-2 py-1 transition-colors',
+                '-ml-px block border-l-2 py-1 transition-all duration-200',
                 item.level === 3 ? 'pl-6' : 'pl-4',
                 activeId === item.id
                   ? 'border-primary font-medium text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground',
+                  : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
               )}
             >
               {item.title}
@@ -51,6 +52,14 @@ export function TableOfContents({ items }: { items: TocItem[] }) {
           </li>
         ))}
       </ul>
+      <a
+        href="#"
+        className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        aria-label="Back to top"
+      >
+        <ArrowUp className="size-3" aria-hidden="true" />
+        Back to top
+      </a>
     </nav>
   )
 }
