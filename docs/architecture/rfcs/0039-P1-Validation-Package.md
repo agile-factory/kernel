@@ -6,7 +6,10 @@
 
 ---
 
-## **Status:** `EN ATTENTE DE VALIDATION`
+## **Status:** `ACCEPTED`
+
+> **Validé le 2026-06-29** — P1 (v0.2.0) entièrement implémenté et CI vert (run#27, sha:b2f3146).
+> Toutes les questions résolues par l'implémentation effective. ADRs 0011–0019 écrits.
 
 ---
 
