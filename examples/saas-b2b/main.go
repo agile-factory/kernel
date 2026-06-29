@@ -35,6 +35,9 @@ import (
 	notifinfra "github.com/agile-factory/kernel/platform/notification/infrastructure"
 	"github.com/agile-factory/kernel/platform/tenant"
 	tenantinfra "github.com/agile-factory/kernel/platform/tenant/infrastructure"
+	"github.com/agile-factory/kernel/platform/billing"
+	"github.com/agile-factory/kernel/platform/billing/adapter"
+	billinginfra "github.com/agile-factory/kernel/platform/billing/infrastructure"
 	"github.com/agile-factory/kernel/platform/user"
 	userinfra "github.com/agile-factory/kernel/platform/user/infrastructure"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -81,6 +84,7 @@ func main() {
 		{Name: "audit", FS: audit.Migrations, Path: "migrations"},
 		{Name: "notification", FS: notification.Migrations, Path: "migrations"},
 		{Name: "user", FS: user.Migrations, Path: "migrations"},
+		{Name: "billing", FS: billing.Migrations, Path: "migrations"},
 	}); err != nil {
 		slog.Error("Failed to run database migrations", "error", err)
 		os.Exit(1)
@@ -220,9 +224,25 @@ func main() {
 	notifMod.RegisterRoutes(mux)
 	userMod.RegisterRoutes(mux)
 
-	// NOTE: platform/billing (P1-4) requires Postgres infrastructure
-	// implementations for SubscriptionRepository and PlanRepository before
-	// it can be wired here. Wiring is deferred until those are added.
+	// ── Billing module (P1-4) ────────────────────────────────────────────────
+	stripeKey := os.Getenv("STRIPE_SECRET_KEY")
+	stripeWebhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	stripeAdapter := adapter.NewStripeAdapter(adapter.StripeConfig{
+		SecretKey:     stripeKey,
+		WebhookSecret: stripeWebhookSecret,
+	})
+	billingMod, err := billing.New(billing.Config{
+		SubRepo:   billinginfra.NewPostgresSubscriptionRepository(db),
+		PlanRepo:  billinginfra.NewPostgresPlanRepository(db),
+		Processor: stripeAdapter,
+		Checker:   checker,
+		Logger:    log,
+	})
+	if err != nil {
+		slog.Error("Failed to initialise billing module", "error", err)
+		os.Exit(1)
+	}
+	billingMod.RegisterRoutes(mux)
 
 	// Wrap the mux with the Prometheus HTTP middleware so all routes are measured.
 	instrumentedMux := metrics.HTTPMiddleware(rec)(mux)
