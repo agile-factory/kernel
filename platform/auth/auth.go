@@ -5,6 +5,7 @@
 package auth
 
 import (
+	"crypto/rsa"
 	"embed"
 	"log/slog"
 	"net/http"
@@ -54,6 +55,12 @@ type Config struct {
 	TokenLifespan   time.Duration
 	RefreshTokenTTL time.Duration
 	BCryptCost      int // 0 = bcrypt default
+
+	// RS256 support (RFC-0028). When set, tokens are signed with RS256 and
+	// a JWKS endpoint is registered at GET /.well-known/jwks.json.
+	// JWTSecret is ignored when RSAPrivateKey is provided.
+	RSAPrivateKey *rsa.PrivateKey
+	JWKSKID       string // Key ID in the JWT header + JWKS response (default "default")
 }
 
 // Module is the self-contained auth platform.
@@ -67,7 +74,7 @@ type Module struct {
 	RefreshUC      *usecase.RefreshTokenUseCase
 	LogoutUC       *usecase.LogoutUseCase
 
-	jwt     *infrastructure.JWTService
+	jwt     infrastructure.TokenSigner
 	hasher  *infrastructure.BcryptHasher
 	handler *authhttp.AuthHandler
 }
@@ -77,8 +84,17 @@ func New(cfg Config) *Module {
 	if cfg.RefreshTokenTTL == 0 {
 		cfg.RefreshTokenTTL = 30 * 24 * time.Hour
 	}
+	if cfg.JWKSKID == "" {
+		cfg.JWKSKID = "default"
+	}
 	hasher := infrastructure.NewBcryptHasher(cfg.BCryptCost)
-	jwt := infrastructure.NewJWTService(cfg.JWTSecret, cfg.TokenLifespan)
+
+	var jwt infrastructure.TokenSigner
+	if cfg.RSAPrivateKey != nil {
+		jwt = infrastructure.NewRS256JWTService(cfg.RSAPrivateKey, cfg.JWKSKID, cfg.TokenLifespan)
+	} else {
+		jwt = infrastructure.NewJWTService(cfg.JWTSecret, cfg.TokenLifespan)
+	}
 
 	signupOwnerUC := usecase.NewSignupOwnerUseCase(
 		cfg.Pool,
@@ -130,12 +146,19 @@ func New(cfg Config) *Module {
 }
 
 // JWTService exposes the auth module's JWT signer/validator for middlewares
-// that need to verify tokens issued by this module.
-func (m *Module) JWTService() *infrastructure.JWTService {
+// that need to verify tokens issued by this module. Returns infrastructure.TokenSigner
+// which is satisfied by both HS256 and RS256 implementations.
+func (m *Module) JWTService() infrastructure.TokenSigner {
 	return m.jwt
 }
 
 // RegisterRoutes mounts the auth HTTP endpoints on the provided mux.
+// When the module is configured with RSAPrivateKey, also registers
+// GET /.well-known/jwks.json for public key discovery (RFC 7517).
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	authhttp.RegisterRoutes(mux, m.handler)
+	if rs256, ok := m.jwt.(*infrastructure.RS256JWTService); ok {
+		mux.HandleFunc("GET /.well-known/jwks.json",
+			authhttp.JWKSHandler(rs256.PublicKey(), rs256.KID()))
+	}
 }
