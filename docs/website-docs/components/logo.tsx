@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
@@ -18,20 +19,14 @@ export function Logo({ className }: { className?: string }) {
         className,
       )}
     >
-      <span
-        aria-hidden="true"
-        className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground"
-      >
-        <svg viewBox="0 0 24 24" className="size-4" fill="none">
-          <path
-            d="M6 4v16M6 12l8-8M6 12l8 8"
-            stroke="currentColor"
-            strokeWidth="2.25"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
+      <Image
+        src="/logo.jpeg"
+        alt="AgileFactory kernel logo"
+        width={28}
+        height={28}
+        className="size-7 rounded-md object-cover"
+        priority
+      />
       <span className="flex items-baseline gap-1">
         <span className="text-muted-foreground">AgileFactory</span>
         <span className="text-foreground">/kernel</span>
