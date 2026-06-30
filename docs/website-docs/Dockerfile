@@ -3,7 +3,7 @@ FROM node:22-alpine AS deps
 RUN corepack enable pnpm
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
 # Stage 2 — build
 FROM node:22-alpine AS builder

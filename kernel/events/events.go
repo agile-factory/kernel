@@ -88,6 +88,7 @@ type Config struct {
 	BatchSize      int           // default 100
 	MaxAttempts    int           // default 10 (per RFC-0015 v1.1)
 	AdvisoryLockID int64         // default = lockKeyOutboxDispatcher
+	WorkerCount    int           // parallel dispatch workers; default 1 (serial)
 }
 
 // default advisory lock key — ASCII "OUTBOXKL" packed as an int64. Stable so
@@ -107,6 +108,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.AdvisoryLockID == 0 {
 		c.AdvisoryLockID = lockKeyOutboxDispatcher
+	}
+	if c.WorkerCount <= 0 {
+		c.WorkerCount = 1
 	}
 }
 

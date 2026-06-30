@@ -1,63 +1,40 @@
-# Kernel Loop — Mandatory Engineering Workflow
+# Kernel Loop — État actuel (mis à jour 2026-06-29)
 
-Working directory: /home/zone01/kernel
-Branch de travail: feat/p1-v0.2.0 (puis main après merge PR #58)
+## Branche active : wbsitedoc
+## PR active : agile-factory/kernel#61 (docs + perf + RS256)
 
-## Workflow obligatoire
-
-```
-RFC PROPOSED → Review Aziz + Lucas → RFC ACCEPTED → Implement → ADR → Review Lucas → Merge
-```
+## Statut P1 — DONE
+- PR #58 (feat/p1-v0.2.0) : mergée ✓
+- Modules P1bis livrés : end_customers, white_label, customer_auth, customer_notifications ✓
+- Issues fermées ce jour : #51 #46 #38 #43 #41 #39 #54 ✓
 
 ## Chaque itération, dans l'ordre :
 
-### 1. CI Watch
-- Vérifier PR #58 (agile-factory/kernel) : `gh pr view 58 --json statusCheckRollup`
-- Si un check échoue → diagnostiquer et corriger immédiatement (staticcheck U1000 = hard fail)
-- Si tous les checks sont verts et qu'il n'y a pas de review bloquante → continuer
+### 1. Surveiller PR #61
+- `gh api repos/agile-factory/kernel/pulls/61` → vérifier state, mergeable, review_comments
+- Si commentaire de review → adresser et push
+- Si CI fail → diagnostiquer et corriger
+- Si prête → noter pour merge (ne pas merger sans instruction explicite)
 
-### 2. RFC Review (Aziz + Lucas)
-- Lister les RFCs en statut PROPOSED dans docs/architecture/rfcs/
-- Pour chaque RFC PROPOSED sans review : lancer agents Aziz ET Lucas EN PARALLÈLE
-  - Agent Aziz : reviewer architecture et cohérence système
-  - Agent Lucas : reviewer sécurité, Go idioms, testabilité
-- Synthétiser leurs feedbacks dans le RFC
-- Si feedback mineur → passer à ACCEPTED + noter les remarques dans le RFC
-- Si feedback majeur → amender le RFC avant ACCEPTED
+### 2. Issues ouvertes restantes
+Issues v0.2.0 encore ouvertes :
+- #48 RFC-0021 SSO OIDC+SAML Enterprise (complexe, dépend sign-off)
+- #47 RFC-0020 Billing Hybride Stripe + Mobile Money (Wave stub en place)
 
-### 3. Implémentation (RFC ACCEPTED uniquement)
-Ordre d'implémentation P1bis :
-  1. RFC-0033 platform/end_customers (fondation, pas de dépendances)
-  2. RFC-0035 platform/white_label (dépend : tenant_settings existant)
-  3. RFC-0034 platform/customer_auth (dépend : end_customers)
-  4. RFC-0036 platform/customer_notifications (dépend : end_customers + white_label)
+Issues DEFERRED P2+ (ne pas toucher) :
+- #53 RFC-0026 Usage Metering
+- #52 RFC-0025 BaaS Versioning
+- #50 RFC-0023 Platform Webhooks
+- #49 RFC-0022 APIKey + PAT
 
-Pour chaque module :
-  - migrations SQL (up + down pair obligatoire)
-  - domain/ (entités + repository port + erreurs)
-  - infrastructure/ (postgres-repo + query.go)
-  - usecase/ (un fichier par use case)
-  - delivery/http/ (routes.go + handlers)
-  - tests (unit + integration stubs)
-  - go test ./platform/<module>/... → PASS obligatoire
-  - staticcheck ./platform/<module>/... → 0 erreur obligatoire
+Milestones (tracking seulement) : #18 #19 #20
 
-### 4. ADR
-- Après chaque module implémenté → créer docs/architecture/adrs/NNNN-<titre>.md
-- Documenter : décision, alternatives rejetées, conséquences
+### 3. Cleanup si rien d'autre
+- go vet ./... → corriger tout warning
+- staticcheck ./... → U1000 = hard fail
+- go test ./... → signaler tout FAIL
 
-### 5. Code Review Lucas
-- Lancer agent Lucas en mode code review sur les fichiers modifiés
-- Adresser tous les commentaires pertinents
-- Commit des corrections
-
-### 6. Commit + Push
-- Un commit par étape logique (RFC update, implémentation, ADR, fixes review)
-- Push vers feat/p1-v0.2.0
-
-## Règles invariantes
-- NE JAMAIS implémenter avant que le RFC soit ACCEPTED
-- Chaque .up.sql doit avoir son .down.sql (lint-migrations.sh = hard fail)
-- staticcheck U1000 = corriger immédiatement
-- go test doit passer avant tout commit d'implémentation
-- Pas de dépendances externes non approuvées (stdlib-first)
+## Règles
+- Ne pas implémenter #48 (SSO) sans RFC sign-off explicite de l'utilisateur
+- Ne pas merger PR sans instruction explicite
+- Chaque .up.sql doit avoir son .down.sql

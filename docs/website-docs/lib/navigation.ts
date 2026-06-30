@@ -106,6 +106,13 @@ export const sidebar: NavGroup[] = [
     ],
   },
   {
+    title: 'Guides',
+    items: [
+      { title: 'Building a Custom Module', href: '/docs/guides/custom-module', badge: 'New' },
+      { title: 'Architecture microservices', href: '/docs/guides/microservices' },
+    ],
+  },
+  {
     title: 'Reference',
     items: [
       { title: 'Architecture (ADRs)', href: '/docs/architecture' },
@@ -133,6 +140,8 @@ export const searchIndex: { title: string; href: string; section: string }[] = [
     href: '/docs/architecture',
     section: 'Reference',
   },
+  { title: 'Building a Custom Module', href: '/docs/guides/custom-module', section: 'Guides' },
+  { title: 'Architecture microservices', href: '/docs/guides/microservices', section: 'Guides' },
   { title: 'RFCs', href: '/docs/rfcs', section: 'Reference' },
   { title: 'Changelog', href: '/changelog', section: 'Reference' },
 ]
