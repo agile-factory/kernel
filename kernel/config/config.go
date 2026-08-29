@@ -34,7 +34,7 @@ type Config struct {
 // Load retrieves the configuration from environment variables
 // with fallback to default values.
 func Load() *Config {
-	_ = godotenv.Load()          // Load .env from current directory (backend)
+	_ = godotenv.Load("./.env")          // Load .env from current directory (backend)
 	_ = godotenv.Load("../.env") // Load .env from root directory as fallback
 	return &Config{
 		Environment:     getEnv("APP_ENV", "development"),

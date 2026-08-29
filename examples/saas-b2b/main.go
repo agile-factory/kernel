@@ -29,15 +29,15 @@ import (
 	auditinfra "github.com/agile-factory/kernel/platform/audit/infrastructure"
 	"github.com/agile-factory/kernel/platform/auth"
 	authinfra "github.com/agile-factory/kernel/platform/auth/infrastructure"
+	"github.com/agile-factory/kernel/platform/billing"
+	"github.com/agile-factory/kernel/platform/billing/adapter"
+	billinginfra "github.com/agile-factory/kernel/platform/billing/infrastructure"
 	"github.com/agile-factory/kernel/platform/membership"
 	memberinfra "github.com/agile-factory/kernel/platform/membership/infrastructure"
 	"github.com/agile-factory/kernel/platform/notification"
 	notifinfra "github.com/agile-factory/kernel/platform/notification/infrastructure"
 	"github.com/agile-factory/kernel/platform/tenant"
 	tenantinfra "github.com/agile-factory/kernel/platform/tenant/infrastructure"
-	"github.com/agile-factory/kernel/platform/billing"
-	"github.com/agile-factory/kernel/platform/billing/adapter"
-	billinginfra "github.com/agile-factory/kernel/platform/billing/infrastructure"
 	"github.com/agile-factory/kernel/platform/user"
 	userinfra "github.com/agile-factory/kernel/platform/user/infrastructure"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,7 +47,7 @@ import (
 
 func main() {
 	cfg := config.Load()
-
+	fmt.Printf("Loaded config: %+v\n", cfg)
 	log, closeLog, err := logger.New(logger.Config{
 		Level:       cfg.LogLevel,
 		Environment: cfg.Environment,
@@ -183,8 +183,8 @@ func main() {
 		slog.Error("Failed to initialise notification module", "error", err)
 		os.Exit(1)
 	}
-	auditMod.Subscribe(bus)  // audit.log_created → audit_logs (at-least-once, RFC-0040)
-	notifMod.Subscribe(bus)  // register handlers before bus.Run starts.
+	auditMod.Subscribe(bus) // audit.log_created → audit_logs (at-least-once, RFC-0040)
+	notifMod.Subscribe(bus) // register handlers before bus.Run starts.
 
 	// ── User profile module (P1-2) ───────────────────────────────────────────
 	profileRepo := userinfra.NewPostgresUserProfileRepository(db)
