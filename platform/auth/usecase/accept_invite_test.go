@@ -204,3 +204,19 @@ func TestAcceptInvite_NewUser_ShortPassword_Rejected(t *testing.T) {
 		t.Fatalf("want ErrPasswordTooShort, got %v", err)
 	}
 }
+
+func TestAcceptInvite_ExistingPendingUser_VerifiedByInvite(t *testing.T) {
+	email, _ := authdomain.NewEmail("pending@agile.io")
+	u := authdomain.NewUser("user-p", email, "hashed_Password123!", authdomain.ROLE_VIEWER)
+	verified := ""
+	users := existingUserRepo(u)
+	users.updateEmailVerified = func(_ context.Context, id string) error { verified = id; return nil }
+	f := newAcceptFixture(t, users, "pending@agile.io")
+
+	if _, err := f.uc.Execute(context.Background(), inviteRaw, "Password123!"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if verified != "user-p" || !u.IsActive() {
+		t.Fatal("redeeming the invite should verify the pending email")
+	}
+}

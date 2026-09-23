@@ -18,6 +18,7 @@
 package response
 
 import (
+	"log/slog"
 	"encoding/json"
 	stderrors "errors"
 	"net/http"
@@ -70,6 +71,12 @@ func Error(w http.ResponseWriter, err error) {
 	// even when the top-level value is a plain error.
 	if !stderrors.As(err, &appErr) {
 		appErr = errors.InternalServerError(err)
+	}
+
+	// The client only sees a generic message for 5xx; keep the cause in the
+	// server logs or the failure is undiagnosable.
+	if appErr.HTTPCode >= 500 {
+		slog.Error("internal error response", "code", appErr.Code, "error", err, "trace_id", appErr.TraceID)
 	}
 
 	body := errorBody{

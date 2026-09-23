@@ -111,6 +111,14 @@ func (uc *AcceptInviteUseCase) Execute(ctx context.Context, rawToken, password s
 			if verr := uc.hasher.Verify(user.HashedPassword, password); verr != nil {
 				return authdomain.ErrInvalidCredentials
 			}
+			// The invite was mailed to this address, so redeeming it proves
+			// email ownership — same reasoning as for new users below.
+			if user.Status == authdomain.USER_STATUS_PENDING_EMAIL {
+				if err := uc.users.UpdateEmailVerified(ctx, user.ID); err != nil {
+					return errors.WrapInternal(err)
+				}
+				user.MarkEmailVerified()
+			}
 			if !user.IsActive() {
 				return authdomain.ErrUserNotActive
 			}
