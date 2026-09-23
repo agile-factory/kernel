@@ -262,10 +262,11 @@ func main() {
 	billingMod.RegisterRoutes(mux)
 
 	// Authentication: every module mounts its routes on the same mux, so the
-	// token is validated globally in optional mode — public routes (signup,
-	// login, health…) work without a header, protected handlers answer 401
-	// on their own when no identity is in the context, and a header that is
-	// present but invalid is rejected here. Tenant resolution (X-Tenant-ID,
+	// token is validated globally in optional mode: a valid token puts the
+	// identity in the context, anything else continues anonymously. Public
+	// routes (signup, login, refresh, health…) therefore work with or without
+	// a header, and protected handlers answer 401 on their own when no
+	// identity is in the context. Tenant resolution (X-Tenant-ID,
 	// ?tenantId) is NOT trusted by itself: handlers check membership through
 	// permission.Checker.
 	var handler http.Handler = mux

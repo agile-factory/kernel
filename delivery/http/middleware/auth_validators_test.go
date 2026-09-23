@@ -66,11 +66,19 @@ func TestOptionalAuth_NoHeader_PassesThroughAnonymous(t *testing.T) {
 	}
 }
 
-func TestOptionalAuth_InvalidToken_Returns401(t *testing.T) {
-	next := &captureHandler{}
-	rec := serve(middleware.OptionalAuth(middleware.NewHS256Validator(testSecret))(next), "Bearer "+validToken("other-secret", "u", "r"))
-	if rec.Code != http.StatusUnauthorized || next.called {
-		t.Fatalf("code=%d called=%v", rec.Code, next.called)
+func TestOptionalAuth_InvalidToken_ContinuesAnonymous(t *testing.T) {
+	for name, authz := range map[string]string{
+		"bad signature": "Bearer " + validToken("other-secret", "u", "r"),
+		"expired":       "Bearer " + expiredToken(testSecret, "u"),
+		"not bearer":    "Basic dXNlcjpwYXNz",
+	} {
+		t.Run(name, func(t *testing.T) {
+			next := &captureHandler{}
+			rec := serve(middleware.OptionalAuth(middleware.NewHS256Validator(testSecret))(next), authz)
+			if rec.Code != http.StatusOK || !next.called || next.userID != "" || next.role != "" {
+				t.Fatalf("code=%d called=%v user=%q role=%q", rec.Code, next.called, next.userID, next.role)
+			}
+		})
 	}
 }
 

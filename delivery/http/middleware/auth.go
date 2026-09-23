@@ -53,11 +53,13 @@ func AuthWith(v TokenValidator) func(http.Handler) http.Handler {
 	return authMiddleware(v, false)
 }
 
-// OptionalAuth validates the Bearer token when one is present and injects the
-// identity; requests without an Authorization header pass through
-// unauthenticated (handlers then see an empty user ID and answer 401
-// themselves). A header that is present but invalid is still rejected with 401.
-// It lets a single mux serve public and protected routes.
+// OptionalAuth injects the identity when the request carries a valid Bearer
+// token; otherwise (no header, malformed, expired, bad signature) the request
+// continues anonymously and protected handlers answer 401 themselves since
+// they find no user ID in the context. Invalid tokens are not rejected here
+// so public routes keep working for clients that still send a stale token
+// (typically POST /auth/refresh with an expired access token). It lets a
+// single mux serve public and protected routes.
 func OptionalAuth(v TokenValidator) func(http.Handler) http.Handler {
 	return authMiddleware(v, true)
 }
@@ -69,11 +71,11 @@ func authMiddleware(v TokenValidator, optional bool) func(http.Handler) http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" && optional {
-				next.ServeHTTP(w, r)
-				return
-			}
 			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				if optional {
+					next.ServeHTTP(w, r)
+					return
+				}
 				response.Error(w, errors.Unauthorized("missing or malformed Authorization header"))
 				return
 			}
@@ -81,6 +83,10 @@ func authMiddleware(v TokenValidator, optional bool) func(http.Handler) http.Han
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 			userID, role, err := v.ValidateToken(token)
 			if err != nil {
+				if optional {
+					next.ServeHTTP(w, r) // anonymous: protected handlers answer 401
+					return
+				}
 				response.Error(w, errors.Unauthorized("invalid or expired token"))
 				return
 			}
