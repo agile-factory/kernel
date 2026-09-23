@@ -133,10 +133,14 @@ func (uc *InviteMemberUseCase) Execute(ctx context.Context, inviterID, tenantID,
 		// Idempotency: a pending invite for the same (tenant, email) is
 		// re-used. Resend should bump the timestamp / regenerate token —
 		// we revoke the existing pending invite and mint a fresh one.
-		if existing, _ := uc.inviteTokens.FindPendingByTenantAndEmail(ctx, tenantID, email.String()); existing != nil {
+		existing, findErr := uc.inviteTokens.FindPendingByTenantAndEmail(ctx, tenantID, email.String())
+		switch {
+		case findErr == nil:
 			if err := uc.inviteTokens.Revoke(ctx, existing.ID); err != nil {
 				return errors.WrapInternal(err)
 			}
+		case !stderrors.Is(findErr, domain.ErrInviteTokenNotFound):
+			return errors.WrapInternal(findErr)
 		}
 
 		raw, err := generateOpaqueToken()

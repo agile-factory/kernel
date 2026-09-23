@@ -43,7 +43,10 @@ func NewJWTService(secretKey string, tokenLifespan time.Duration) *JWTService {
 // GenerateToken generates a JWT for the given user.
 func (s *JWTService) GenerateToken(user *domain.User) (string, error) {
 	header := jwtHeader{Alg: "HS256", Typ: "JWT"}
-	headerBytes, _ := json.Marshal(header)
+	headerBytes, err := json.Marshal(header)
+	if err != nil {
+		return "", err
+	}
 	encodedHeader := base64.RawURLEncoding.EncodeToString(headerBytes)
 
 	now := time.Now()
@@ -53,7 +56,10 @@ func (s *JWTService) GenerateToken(user *domain.User) (string, error) {
 		Exp:  now.Add(s.tokenLifespan).Unix(),
 		Iat:  now.Unix(),
 	}
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
 	encodedPayload := base64.RawURLEncoding.EncodeToString(payloadBytes)
 
 	unsignedToken := encodedHeader + "." + encodedPayload

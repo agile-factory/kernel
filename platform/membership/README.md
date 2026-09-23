@@ -50,7 +50,7 @@ Le `UserLookup` est l'interface minimale `{ FindByEmail(ctx, email) }` consommé
 
 | Méthode | Route | Garde | Description |
 |---|---|---|---|
-| `POST` | `/api/v1/memberships/invite` | OWNER/ADMIN du tenant | Crée un `invite_token` (durée 7j). Émet `member.invited`. Réponse contient le **raw token** (à transmettre au mail ou copier à la main). |
+| `POST` | `/api/v1/memberships/invite` | OWNER/ADMIN du tenant | Crée un `invite_token` (durée 7j). Émet `member.invited`. Le raw token n'est **pas** renvoyé : il part uniquement par mail (outbox → `platform/notification`). |
 | `POST` | `/api/v1/memberships/{id}/revoke` | OWNER/ADMIN du tenant | Passe membership ACTIVE → REVOKED. Idempotent. |
 | `GET` | `/api/v1/memberships/tenant/{tenantId}` | Membership du tenant | Liste paginée (offset). |
 | `GET` | `/api/v1/memberships/user/{userId}` | Self ou platform admin | Liste paginée. |

@@ -35,27 +35,25 @@ func (r *InviteRequest) Validate() error {
 	return nil
 }
 
-// InviteResponse echoes the persisted invite plus the raw token. The raw
-// token is intended to be emailed by the notification platform (consumer of
-// `member.invited`); the API returns it so callers can implement custom
-// flows (in-house mailer, copy-to-clipboard for dev, …) without round-trips.
+// InviteResponse echoes the persisted invite. The raw token is deliberately
+// NOT included: it is delivered only to the invitee, by email, through the
+// `member.invited` outbox event. Returning it to the inviter would let them
+// redeem an invite addressed to someone else.
 type InviteResponse struct {
 	ID        string `json:"id"`
 	TenantID  string `json:"tenantId"`
 	Email     string `json:"email"`
 	Role      string `json:"role"`
-	Token     string `json:"token"`
 	ExpiresAt string `json:"expiresAt"`
 	CreatedAt string `json:"createdAt"`
 }
 
-func toInviteResponse(invite *domain.InviteToken, rawToken string) InviteResponse {
+func toInviteResponse(invite *domain.InviteToken) InviteResponse {
 	return InviteResponse{
 		ID:        invite.ID,
 		TenantID:  invite.TenantID,
 		Email:     invite.Email,
 		Role:      string(invite.Role),
-		Token:     rawToken,
 		ExpiresAt: invite.ExpiresAt.Format(time.RFC3339),
 		CreatedAt: invite.CreatedAt.Format(time.RFC3339),
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/agile-factory/kernel/kernel/txctx"
 	"github.com/agile-factory/kernel/platform/customer_auth/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,7 +25,7 @@ func NewPostgresRefreshTokenRepository(db *pgxpool.Pool) *PostgresRefreshTokenRe
 
 // Create inserts a new refresh token row.
 func (r *PostgresRefreshTokenRepository) Create(ctx context.Context, t *domain.CustomerRefreshToken) error {
-	_, err := r.db.Exec(ctx, `
+	_, err := txctx.DB(ctx, r.db).Exec(ctx, `
 		INSERT INTO customer_refresh_tokens
 			(end_customer_id, tenant_id, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)
@@ -34,7 +35,7 @@ func (r *PostgresRefreshTokenRepository) Create(ctx context.Context, t *domain.C
 
 // FindByHash looks up a non-revoked refresh token.
 func (r *PostgresRefreshTokenRepository) FindByHash(ctx context.Context, tokenHash string) (*domain.CustomerRefreshToken, error) {
-	row := r.db.QueryRow(ctx, `
+	row := txctx.DB(ctx, r.db).QueryRow(ctx, `
 		SELECT id, end_customer_id, tenant_id, token_hash, expires_at, revoked_at, created_at
 		FROM customer_refresh_tokens
 		WHERE token_hash = $1 AND revoked_at IS NULL
@@ -52,17 +53,25 @@ func (r *PostgresRefreshTokenRepository) FindByHash(ctx context.Context, tokenHa
 	return t, nil
 }
 
-// Revoke marks a specific refresh token as revoked.
+// Revoke marks a specific refresh token as revoked. It returns
+// domain.ErrTokenConsumed when the token was already revoked, so two
+// concurrent rotations of the same token cannot both succeed.
 func (r *PostgresRefreshTokenRepository) Revoke(ctx context.Context, id string) error {
-	_, err := r.db.Exec(ctx, `
-		UPDATE customer_refresh_tokens SET revoked_at = NOW() WHERE id = $1
+	tag, err := txctx.DB(ctx, r.db).Exec(ctx, `
+		UPDATE customer_refresh_tokens SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL
 	`, id)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrTokenConsumed
+	}
+	return nil
 }
 
 // RevokeAllForEndCustomer revokes all active refresh tokens for the given end-customer.
 func (r *PostgresRefreshTokenRepository) RevokeAllForEndCustomer(ctx context.Context, endCustomerID string) error {
-	_, err := r.db.Exec(ctx, `
+	_, err := txctx.DB(ctx, r.db).Exec(ctx, `
 		UPDATE customer_refresh_tokens
 		SET revoked_at = NOW()
 		WHERE end_customer_id = $1 AND revoked_at IS NULL

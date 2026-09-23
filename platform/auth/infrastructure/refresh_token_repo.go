@@ -38,11 +38,19 @@ func (r *PostgresRefreshTokenRepository) Save(ctx context.Context, t *domain.Ref
 }
 
 func (r *PostgresRefreshTokenRepository) FindByHash(ctx context.Context, hash string) (*domain.RefreshToken, error) {
+	return r.findByHash(ctx, queryGetRefreshTokenByHash, hash)
+}
+
+func (r *PostgresRefreshTokenRepository) FindByHashForUpdate(ctx context.Context, hash string) (*domain.RefreshToken, error) {
+	return r.findByHash(ctx, queryGetRefreshTokenByHashForUpdate, hash)
+}
+
+func (r *PostgresRefreshTokenRepository) findByHash(ctx context.Context, query, hash string) (*domain.RefreshToken, error) {
 	var (
 		t        domain.RefreshToken
 		tenantID *string
 	)
-	err := txctx.DB(ctx, r.db).QueryRow(ctx, queryGetRefreshTokenByHash, hash).Scan(
+	err := txctx.DB(ctx, r.db).QueryRow(ctx, query, hash).Scan(
 		&t.ID,
 		&t.UserID,
 		&tenantID,
@@ -65,5 +73,10 @@ func (r *PostgresRefreshTokenRepository) FindByHash(ctx context.Context, hash st
 
 func (r *PostgresRefreshTokenRepository) Revoke(ctx context.Context, id string) error {
 	_, err := txctx.DB(ctx, r.db).Exec(ctx, queryRevokeRefreshToken, id)
+	return err
+}
+
+func (r *PostgresRefreshTokenRepository) RevokeAllForUser(ctx context.Context, userID string) error {
+	_, err := txctx.DB(ctx, r.db).Exec(ctx, queryRevokeAllRefreshTokensForUser, userID)
 	return err
 }

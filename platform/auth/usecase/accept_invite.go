@@ -2,11 +2,11 @@ package usecase
 
 import (
 	"context"
+	stderrors "errors"
 	"time"
 
 	"github.com/agile-factory/kernel/kernel/errors"
 	"github.com/agile-factory/kernel/kernel/events"
-	"github.com/agile-factory/kernel/kernel/txctx"
 	"github.com/agile-factory/kernel/platform/audit"
 	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
 	authdomain "github.com/agile-factory/kernel/platform/auth/domain"
@@ -27,18 +27,19 @@ type AcceptInviteOutput struct {
 
 // AcceptInviteUseCase consumes an invite token and produces an ACTIVE
 // membership with the pre-decided role. If the email already corresponds
-// to an existing user, that user is reused — the password parameter is
-// then ignored and a sanity check on email-match is enforced. Otherwise a
-// new VERIFIED user is created (the invite token's redemption is itself
+// to an existing user, that user is reused — but only after the caller
+// proves ownership of the account with its current password (possession of
+// the invite token alone is not enough: the inviter may have seen it).
+// Otherwise a new VERIFIED user is created (the invite token's redemption is itself
 // the proof of email ownership, per RFC-0018 §1).
 type AcceptInviteUseCase struct {
-	pool *pgxpool.Pool
+	runInTx txRunner
 
 	users           authdomain.UserRepository
 	memberships     memberdomain.MembershipRepository
 	inviteTokens    memberdomain.InviteTokenRepository
 	refreshTokens   authdomain.RefreshTokenRepository
-	hasher          PasswordHasher
+	hasher          PasswordHasherVerifier
 	tokenIssuer     TokenGenerator
 	publisher       events.Publisher
 	auditLogger     audit.EventLogger
@@ -51,14 +52,14 @@ func NewAcceptInviteUseCase(
 	memberships memberdomain.MembershipRepository,
 	inviteTokens memberdomain.InviteTokenRepository,
 	refreshTokens authdomain.RefreshTokenRepository,
-	hasher PasswordHasher,
+	hasher PasswordHasherVerifier,
 	tokenIssuer TokenGenerator,
 	publisher events.Publisher,
 	auditLogger audit.EventLogger,
 	refreshTokenTTL time.Duration,
 ) *AcceptInviteUseCase {
 	return &AcceptInviteUseCase{
-		pool:            pool,
+		runInTx:         poolTxRunner(pool),
 		users:           users,
 		memberships:     memberships,
 		inviteTokens:    inviteTokens,
@@ -71,13 +72,13 @@ func NewAcceptInviteUseCase(
 	}
 }
 
-// Execute redeems the invite token. password is only used when the email
-// is unknown (new user); for existing users the parameter is ignored and
-// callers are expected to send it as empty.
+// Execute redeems the invite token. For a new user, password becomes the
+// account password. For an existing user, password must be the account's
+// current password; otherwise ErrInvalidCredentials is returned.
 func (uc *AcceptInviteUseCase) Execute(ctx context.Context, rawToken, password string) (*AcceptInviteOutput, error) {
 	out := &AcceptInviteOutput{}
 
-	txErr := txctx.ExecInTx(ctx, uc.pool, func(ctx context.Context) error {
+	txErr := uc.runInTx(ctx, func(ctx context.Context) error {
 		invite, err := uc.inviteTokens.FindByToken(ctx, rawToken)
 		if err != nil {
 			return err
@@ -101,12 +102,20 @@ func (uc *AcceptInviteUseCase) Execute(ctx context.Context, rawToken, password s
 		user, err := uc.users.FindByEmail(ctx, email)
 		switch {
 		case err == nil:
-			// Existing user — make sure no one stole the link.
-			if user.Email.String() != invite.Email {
-				return memberdomain.ErrInviteEmailMismatch
+			// Existing account: the invite token proves the inviter picked
+			// this email, not that the caller owns the account. Require the
+			// account password so a token leak cannot become a takeover.
+			if password == "" {
+				return authdomain.ErrInvalidCredentials
 			}
-		default:
-			if password == "" || len(password) < MinPasswordLength {
+			if verr := uc.hasher.Verify(user.HashedPassword, password); verr != nil {
+				return authdomain.ErrInvalidCredentials
+			}
+			if !user.IsActive() {
+				return authdomain.ErrUserNotActive
+			}
+		case stderrors.Is(err, authdomain.ErrUserNotFound):
+			if len(password) < MinPasswordLength {
 				return authdomain.ErrPasswordTooShort
 			}
 			hashed, hashErr := uc.hasher.Hash(password)
@@ -117,6 +126,8 @@ func (uc *AcceptInviteUseCase) Execute(ctx context.Context, rawToken, password s
 			if err := uc.users.Save(ctx, user); err != nil {
 				return errors.WrapInternal(err)
 			}
+		default:
+			return errors.WrapInternal(err)
 		}
 		out.User = user
 

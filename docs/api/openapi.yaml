@@ -76,7 +76,9 @@ paths:
       summary: Accepte une invitation (consomme un invite_token)
       description: |
         Consomme un `invite_token` émis par `POST /api/v1/memberships/invite`.
-        Si l'email est inconnu, crée un user (password requis). Sinon, ajoute juste un membership ACTIVE au tenant.
+        Si l'email est inconnu, crée un user avec `password` comme mot de passe. Si l'email correspond
+        à un compte existant, `password` doit être le mot de passe actuel de ce compte (sinon 401
+        `INVALID_CREDENTIALS`) — le token seul ne prouve pas la possession du compte.
         Émet `auth.invite_accepted`.
       security: []
       requestBody:
@@ -339,9 +341,9 @@ paths:
       tags: [memberships]
       summary: Invite un membre par email (OWNER/ADMIN)
       description: |
-        Crée un `invite_token` (TTL 7j) et émet `member.invited`. Renvoie le **raw token** —
-        c'est au consommateur de l'inclure dans le mail (ou de le passer à `platform/notification`
-        via l'outbox, qui fait ça automatiquement).
+        Crée un `invite_token` (TTL 7j) et émet `member.invited`. Le **raw token** n'est PAS
+        renvoyé à l'inviteur : il ne voyage que dans le payload outbox, consommé par
+        `platform/notification` qui envoie le mail d'invitation.
       requestBody:
         required: true
         content:
@@ -547,13 +549,14 @@ components:
 
     AcceptInviteRequest:
       type: object
-      required: [token]
+      required: [token, password]
       properties:
         token:    { type: string, minLength: 1 }
         password:
           type: string
           minLength: 12
-          description: Requis si l'email n'a pas encore de user
+          maxLength: 72
+          description: Nouveau mot de passe si l'email est inconnu ; sinon mot de passe actuel du compte existant
 
     AcceptInviteResponse:
       type: object
@@ -691,7 +694,6 @@ components:
         tenantId:  { type: string, format: uuid }
         email:     { type: string, format: email }
         role:      { $ref: '#/components/schemas/MemberRole' }
-        token:     { type: string, description: Raw token — à transmettre via mail (ou laisser l'outbox notification le faire) }
         expiresAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
 

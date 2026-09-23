@@ -52,7 +52,10 @@ func (s *RS256JWTService) KID() string { return s.kid }
 // GenerateToken issues a signed RS256 JWT for the given user.
 func (s *RS256JWTService) GenerateToken(user *domain.User) (string, error) {
 	header := map[string]string{"alg": "RS256", "typ": "JWT", "kid": s.kid}
-	headerBytes, _ := json.Marshal(header)
+	headerBytes, err := json.Marshal(header)
+	if err != nil {
+		return "", err
+	}
 	encodedHeader := base64.RawURLEncoding.EncodeToString(headerBytes)
 
 	now := time.Now()
@@ -62,7 +65,10 @@ func (s *RS256JWTService) GenerateToken(user *domain.User) (string, error) {
 		Exp:  now.Add(s.tokenLifespan).Unix(),
 		Iat:  now.Unix(),
 	}
-	payloadBytes, _ := json.Marshal(payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
 	encodedPayload := base64.RawURLEncoding.EncodeToString(payloadBytes)
 
 	unsignedToken := encodedHeader + "." + encodedPayload

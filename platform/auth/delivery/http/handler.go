@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/agile-factory/kernel/kernel/errors"
@@ -62,7 +63,7 @@ func (h *AuthHandler) SignupOwner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	memberships, _ := h.listMembersUC.ByUser(r.Context(), out.User.ID)
+	memberships := h.membershipsOf(r, out.User.ID)
 	response.JSON(w, http.StatusCreated, SignupOwnerResponse{
 		TenantID:                 out.Tenant.ID,
 		UserID:                   out.User.ID,
@@ -92,7 +93,7 @@ func (h *AuthHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	memberships, _ := h.listMembersUC.ByUser(r.Context(), out.User.ID)
+	memberships := h.membershipsOf(r, out.User.ID)
 	response.JSON(w, http.StatusOK, AcceptInviteResponse{
 		UserID:       out.User.ID,
 		MembershipID: out.Membership.ID,
@@ -140,7 +141,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	memberships, _ := h.listMembersUC.ByUser(r.Context(), out.User.ID)
+	memberships := h.membershipsOf(r, out.User.ID)
 	response.JSON(w, http.StatusOK, LoginResponse{
 		AccessToken:  out.AccessToken,
 		RefreshToken: out.RefreshToken,
@@ -209,4 +210,16 @@ func toMembershipSummaries(memberships []*memberdomain.Membership) []MembershipS
 		}
 	}
 	return result
+}
+
+// membershipsOf lists the user's memberships for the response DTO. The
+// authentication itself already succeeded, so a failure here degrades the
+// payload (empty list) instead of failing the request — but it is logged.
+func (h *AuthHandler) membershipsOf(r *http.Request, userID string) []*memberdomain.Membership {
+	memberships, err := h.listMembersUC.ByUser(r.Context(), userID)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "auth: list memberships for response failed", "user_id", userID, "error", err)
+		return nil
+	}
+	return memberships
 }
