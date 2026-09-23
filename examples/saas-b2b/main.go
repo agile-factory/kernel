@@ -24,6 +24,7 @@ import (
 	"github.com/agile-factory/kernel/kernel/logger"
 	"github.com/agile-factory/kernel/kernel/metrics"
 	"github.com/agile-factory/kernel/kernel/migrator"
+	"github.com/agile-factory/kernel/kernel/ratelimit"
 	"github.com/agile-factory/kernel/kernel/permission"
 	"github.com/agile-factory/kernel/kernel/server"
 	"github.com/agile-factory/kernel/platform/audit"
@@ -274,7 +275,30 @@ func main() {
 	// Wrap with the Prometheus HTTP middleware so all routes are measured.
 	instrumentedMux := metrics.HTTPMiddleware(rec)(handler)
 
-	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(instrumentedMux, log))
+	// Credential endpoints get a strict per-IP budget (brute force, signup
+	// spam). IPKeyFn keys on the TCP peer; behind a reverse proxy switch to
+	// ratelimit.TrustedProxyIPKeyFn with the proxy's CIDR.
+	authLimiter := ratelimit.NewRate(10.0/60, 10) // 10 requests/minute, burst 10
+	limitedMux := ratelimit.Middleware(authLimiter, ratelimit.IPKeyFn)(instrumentedMux)
+	credentialRoutes := map[string]bool{
+		"/api/v1/auth/login":         true,
+		"/api/v1/auth/signup-owner":  true,
+		"/api/v1/auth/accept-invite": true,
+		"/api/v1/auth/refresh":       true,
+		"/api/v1/auth/verify-email":  true,
+	}
+	withAuthLimit := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && credentialRoutes[r.URL.Path] {
+			limitedMux.ServeHTTP(w, r)
+			return
+		}
+		instrumentedMux.ServeHTTP(w, r)
+	})
+
+	// Timeout sits inside Recovery (ApplyGlobalMiddlewares) so a handler
+	// panic re-raised by TimeoutMiddleware still becomes a 500.
+	app := server.TimeoutMiddleware(server.DefaultRequestTimeout)(withAuthLimit)
+	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(app, log))
 	healthChecker.MarkReady()
 
 	// Run lifecycle: a cancellable parent context drives the dispatcher and

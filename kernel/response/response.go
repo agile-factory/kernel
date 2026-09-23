@@ -46,11 +46,12 @@ type errorBody struct {
 	Debug    string `json:"debug,omitempty"` // populated in non-production only
 }
 
-// isProduction returns true when APP_ENV is "production" or "staging".
-// Both environments suppress internal stack details from API responses.
+// isProduction returns true unless APP_ENV is explicitly "development" or
+// "test": stack details are only surfaced where they are known to be safe,
+// so an unset or misspelt APP_ENV fails closed.
 func isProduction() bool {
 	env := os.Getenv("APP_ENV")
-	return env == "production" || env == "staging"
+	return env != "development" && env != "test"
 }
 
 // Error sends a JSON error response.
