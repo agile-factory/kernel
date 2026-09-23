@@ -17,6 +17,7 @@ import (
 	"syscall"
 
 	deliveryhttp "github.com/agile-factory/kernel/delivery/http"
+	"github.com/agile-factory/kernel/delivery/http/middleware"
 	"github.com/agile-factory/kernel/kernel/config"
 	"github.com/agile-factory/kernel/kernel/events"
 	"github.com/agile-factory/kernel/kernel/health"
@@ -60,6 +61,14 @@ func main() {
 		defer closeLog()
 	}
 	slog.SetDefault(log)
+
+	if err := cfg.Validate(); err != nil {
+		slog.Error("Invalid configuration", "error", err)
+		os.Exit(1)
+	}
+	if cfg.JWTSecretGenerated {
+		slog.Warn("JWT_SECRET is not set: using a random per-process secret (development only; tokens will not survive a restart)")
+	}
 
 	slog.Info("Starting application", "env", cfg.Environment, "port", cfg.Port)
 
@@ -192,6 +201,7 @@ func main() {
 	userMod, err := user.New(user.Config{
 		Repo:    profileRepo,
 		Checker: checker,
+		Members: memberRepo,
 		Logger:  log,
 	})
 	if err != nil {
@@ -250,8 +260,19 @@ func main() {
 	}
 	billingMod.RegisterRoutes(mux)
 
-	// Wrap the mux with the Prometheus HTTP middleware so all routes are measured.
-	instrumentedMux := metrics.HTTPMiddleware(rec)(mux)
+	// Authentication: every module mounts its routes on the same mux, so the
+	// token is validated globally in optional mode — public routes (signup,
+	// login, health…) work without a header, protected handlers answer 401
+	// on their own when no identity is in the context, and a header that is
+	// present but invalid is rejected here. Tenant resolution (X-Tenant-ID,
+	// ?tenantId) is NOT trusted by itself: handlers check membership through
+	// permission.Checker.
+	var handler http.Handler = mux
+	handler = middleware.TenantContextOptional(handler)
+	handler = middleware.OptionalAuth(middleware.NewHS256Validator(cfg.JWTSecret))(handler)
+
+	// Wrap with the Prometheus HTTP middleware so all routes are measured.
+	instrumentedMux := metrics.HTTPMiddleware(rec)(handler)
 
 	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(instrumentedMux, log))
 	healthChecker.MarkReady()

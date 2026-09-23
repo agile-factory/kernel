@@ -13,6 +13,7 @@ import (
 	apperrors "github.com/agile-factory/kernel/kernel/errors"
 	"github.com/agile-factory/kernel/kernel/events"
 	"github.com/agile-factory/kernel/kernel/permission"
+	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
 	"github.com/agile-factory/kernel/platform/user"
 	"github.com/agile-factory/kernel/platform/user/domain"
 	"github.com/agile-factory/kernel/platform/user/usecase"
@@ -188,12 +189,23 @@ func testModule(repo *stubRepo, allow bool) *user.Module {
 	mod, err := user.New(user.Config{
 		Repo:    repo,
 		Checker: checker,
+		Members: membersStub{"u1|t1": true, "u2|t1": true, "u3|t2": true},
 		Logger:  testLogger(),
 	})
 	if err != nil {
 		panic("testModule: " + err.Error())
 	}
 	return mod
+}
+
+// membersStub maps "userID|tenantID" to an ACTIVE membership.
+type membersStub map[string]bool
+
+func (m membersStub) FindByUserAndTenant(_ context.Context, userID, tenantID string) (*memberdomain.Membership, error) {
+	if !m[userID+"|"+tenantID] {
+		return nil, memberdomain.ErrMembershipNotFound
+	}
+	return memberdomain.NewSelfMembership("m-"+userID, userID, tenantID, memberdomain.MEMBER_ROLE_VIEWER), nil
 }
 
 // permCheckerStub satisfies permission.Checker for tests.
@@ -394,9 +406,10 @@ func TestNew_MissingConfig_ReturnsError(t *testing.T) {
 		name string
 		cfg  user.Config
 	}{
-		{"no Repo", user.Config{Checker: checker, Logger: logger}},
-		{"no Checker", user.Config{Repo: repo, Logger: logger}},
-		{"no Logger", user.Config{Repo: repo, Checker: checker}},
+		{"no Repo", user.Config{Checker: checker, Members: membersStub{}, Logger: logger}},
+		{"no Checker", user.Config{Repo: repo, Members: membersStub{}, Logger: logger}},
+		{"no Members", user.Config{Repo: repo, Checker: checker, Logger: logger}},
+		{"no Logger", user.Config{Repo: repo, Checker: checker, Members: membersStub{}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -405,5 +418,32 @@ func TestNew_MissingConfig_ReturnsError(t *testing.T) {
 				t.Errorf("expected error for %s", tc.name)
 			}
 		})
+	}
+}
+
+func TestHTTP_GetProfile_TenantScoping(t *testing.T) {
+	now := time.Now()
+	repo := newStubRepo(
+		&domain.UserProfile{UserID: "u2", DisplayName: "Same tenant", UpdatedAt: now},
+		&domain.UserProfile{UserID: "u3", DisplayName: "Other tenant", UpdatedAt: now},
+	)
+	mux := http.NewServeMux()
+	testModule(repo, true).RegisterRoutes(mux)
+
+	cases := []struct {
+		target string
+		want   int
+	}{
+		{"u2", http.StatusOK},       // active member of t1
+		{"u3", http.StatusNotFound}, // exists, but only in t2
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest("GET", "/api/v1/users/"+tc.target+"/profile", nil)
+		req = req.WithContext(ctxWithUser("u1", "t1"))
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != tc.want {
+			t.Errorf("GET %s: want %d, got %d (%s)", tc.target, tc.want, w.Code, w.Body.String())
+		}
 	}
 }
