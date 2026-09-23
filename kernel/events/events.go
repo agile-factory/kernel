@@ -89,6 +89,12 @@ type Config struct {
 	MaxAttempts    int           // default 10 (per RFC-0015 v1.1)
 	AdvisoryLockID int64         // default = lockKeyOutboxDispatcher
 	WorkerCount    int           // parallel dispatch workers; default 1 (serial)
+	HandlerTimeout time.Duration // per-handler deadline; default 30s
+
+	// Pool sizing: a batch holds 1 connection for the advisory lock plus 1
+	// per worker (its status tx stays open while handlers run), and handlers
+	// that write through the pool take one more each. Keep the pool's
+	// MaxConns above 2*WorkerCount+1 or dispatch can starve (New warns).
 }
 
 // default advisory lock key — ASCII "OUTBOXKL" packed as an int64. Stable so
@@ -111,6 +117,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.WorkerCount <= 0 {
 		c.WorkerCount = 1
+	}
+	if c.HandlerTimeout <= 0 {
+		c.HandlerTimeout = 30 * time.Second
 	}
 }
 
@@ -143,6 +152,10 @@ func New(cfg Config) (*Bus, error) {
 	cfg.applyDefaults()
 	if err := cfg.validate(); err != nil {
 		return nil, err
+	}
+	if maxConns := cfg.Pool.Config().MaxConns; maxConns <= int32(2*cfg.WorkerCount+1) {
+		cfg.Logger.Warn("events: pool may be too small for the outbox dispatcher",
+			"max_conns", maxConns, "worker_count", cfg.WorkerCount, "recommended_min", 2*cfg.WorkerCount+2)
 	}
 	b := &Bus{
 		cfg:      cfg,
