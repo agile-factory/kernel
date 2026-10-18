@@ -90,6 +90,10 @@ func New(cfg Config) *Module {
 	hasher := infrastructure.NewBcryptHasher(cfg.BCryptCost)
 
 	var jwt infrastructure.TokenSigner
+	if cfg.RSAPrivateKey == nil && cfg.JWTSecret == "" {
+		// An empty HMAC key lets anyone forge tokens; refuse to start.
+		panic("auth: JWTSecret is empty and no RSAPrivateKey is set")
+	}
 	if cfg.RSAPrivateKey != nil {
 		jwt = infrastructure.NewRS256JWTService(cfg.RSAPrivateKey, cfg.JWKSKID, cfg.TokenLifespan)
 	} else {

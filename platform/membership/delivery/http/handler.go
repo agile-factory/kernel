@@ -58,7 +58,7 @@ func (h *MembershipHandler) Invite(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, err)
 		return
 	}
-	response.JSON(w, http.StatusCreated, toInviteResponse(out.Invite, out.RawToken))
+	response.JSON(w, http.StatusCreated, toInviteResponse(out.Invite))
 }
 
 // Revoke handles POST /api/v1/memberships/{id}/revoke.

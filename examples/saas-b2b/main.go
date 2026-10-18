@@ -17,12 +17,14 @@ import (
 	"syscall"
 
 	deliveryhttp "github.com/agile-factory/kernel/delivery/http"
+	"github.com/agile-factory/kernel/delivery/http/middleware"
 	"github.com/agile-factory/kernel/kernel/config"
 	"github.com/agile-factory/kernel/kernel/events"
 	"github.com/agile-factory/kernel/kernel/health"
 	"github.com/agile-factory/kernel/kernel/logger"
 	"github.com/agile-factory/kernel/kernel/metrics"
 	"github.com/agile-factory/kernel/kernel/migrator"
+	"github.com/agile-factory/kernel/kernel/ratelimit"
 	"github.com/agile-factory/kernel/kernel/permission"
 	"github.com/agile-factory/kernel/kernel/server"
 	"github.com/agile-factory/kernel/platform/audit"
@@ -60,6 +62,14 @@ func main() {
 		defer closeLog()
 	}
 	slog.SetDefault(log)
+
+	if err := cfg.Validate(); err != nil {
+		slog.Error("Invalid configuration", "error", err)
+		os.Exit(1)
+	}
+	if cfg.JWTSecretGenerated {
+		slog.Warn("JWT_SECRET is not set: using a random per-process secret (development only; tokens will not survive a restart)")
+	}
 
 	slog.Info("Starting application", "env", cfg.Environment, "port", cfg.Port)
 
@@ -192,6 +202,7 @@ func main() {
 	userMod, err := user.New(user.Config{
 		Repo:    profileRepo,
 		Checker: checker,
+		Members: memberRepo,
 		Logger:  log,
 	})
 	if err != nil {
@@ -250,10 +261,45 @@ func main() {
 	}
 	billingMod.RegisterRoutes(mux)
 
-	// Wrap the mux with the Prometheus HTTP middleware so all routes are measured.
-	instrumentedMux := metrics.HTTPMiddleware(rec)(mux)
+	// Authentication: every module mounts its routes on the same mux, so the
+	// token is validated globally in optional mode: a valid token puts the
+	// identity in the context, anything else continues anonymously. Public
+	// routes (signup, login, refresh, health…) therefore work with or without
+	// a header, and protected handlers answer 401 on their own when no
+	// identity is in the context. Tenant resolution (X-Tenant-ID,
+	// ?tenantId) is NOT trusted by itself: handlers check membership through
+	// permission.Checker.
+	var handler http.Handler = mux
+	handler = middleware.TenantContextOptional(handler)
+	handler = middleware.OptionalAuth(middleware.NewHS256Validator(cfg.JWTSecret))(handler)
 
-	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(instrumentedMux, log))
+	// Wrap with the Prometheus HTTP middleware so all routes are measured.
+	instrumentedMux := metrics.HTTPMiddleware(rec)(handler)
+
+	// Credential endpoints get a strict per-IP budget (brute force, signup
+	// spam). IPKeyFn keys on the TCP peer; behind a reverse proxy switch to
+	// ratelimit.TrustedProxyIPKeyFn with the proxy's CIDR.
+	authLimiter := ratelimit.NewRate(10.0/60, 10) // 10 requests/minute, burst 10
+	limitedMux := ratelimit.Middleware(authLimiter, ratelimit.IPKeyFn)(instrumentedMux)
+	credentialRoutes := map[string]bool{
+		"/api/v1/auth/login":         true,
+		"/api/v1/auth/signup-owner":  true,
+		"/api/v1/auth/accept-invite": true,
+		"/api/v1/auth/refresh":       true,
+		"/api/v1/auth/verify-email":  true,
+	}
+	withAuthLimit := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && credentialRoutes[r.URL.Path] {
+			limitedMux.ServeHTTP(w, r)
+			return
+		}
+		instrumentedMux.ServeHTTP(w, r)
+	})
+
+	// Timeout sits inside Recovery (ApplyGlobalMiddlewares) so a handler
+	// panic re-raised by TimeoutMiddleware still becomes a 500.
+	app := server.TimeoutMiddleware(server.DefaultRequestTimeout)(withAuthLimit)
+	srv := server.New(cfg, deliveryhttp.ApplyGlobalMiddlewares(app, log))
 	healthChecker.MarkReady()
 
 	// Run lifecycle: a cancellable parent context drives the dispatcher and

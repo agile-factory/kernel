@@ -35,6 +35,7 @@ type OutboxDispatcher struct {
 	maxAttempts    int
 	advisoryLockID int64
 	workerCount    int
+	handlerTimeout time.Duration
 
 	handlersFor func(eventType string) []EventHandler
 }
@@ -48,6 +49,7 @@ func newOutboxDispatcher(cfg Config, handlersFor func(string) []EventHandler) *O
 		maxAttempts:    cfg.MaxAttempts,
 		advisoryLockID: cfg.AdvisoryLockID,
 		workerCount:    cfg.WorkerCount,
+		handlerTimeout: cfg.HandlerTimeout,
 		handlersFor:    handlersFor,
 	}
 }
@@ -105,7 +107,12 @@ func (d *OutboxDispatcher) dispatchBatch(ctx context.Context) error {
 	}
 	defer func() {
 		if _, err := lockConn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, d.advisoryLockID); err != nil {
-			d.logger.Warn("outbox dispatcher: advisory unlock failed", "error", err)
+			// The lock is session-scoped: returning this connection to the
+			// pool would keep it held forever and stall every replica.
+			// Closing the connection ends the session and frees the lock;
+			// pgxpool discards closed connections on Release.
+			d.logger.Warn("outbox dispatcher: advisory unlock failed, closing connection", "error", err)
+			_ = lockConn.Conn().Close(context.Background())
 		}
 	}()
 
@@ -253,11 +260,25 @@ func (d *OutboxDispatcher) dispatchOne(ctx context.Context, tx pgx.Tx, pe pendin
 		return d.markPublished(ctx, tx, pe.id)
 	}
 	for _, h := range handlers {
-		if err := h(ctx, pe.event); err != nil {
+		if err := d.runHandler(ctx, h, pe.event); err != nil {
 			return d.recordFailure(ctx, tx, pe, err)
 		}
 	}
 	return d.markPublished(ctx, tx, pe.id)
+}
+
+// runHandler invokes h with a per-event deadline and turns a panic into an
+// error, so one misbehaving handler can neither hang the batch (and the
+// advisory lock with it) nor crash the process.
+func (d *OutboxDispatcher) runHandler(ctx context.Context, h EventHandler, ev Event) (err error) {
+	hctx, cancel := context.WithTimeout(ctx, d.handlerTimeout)
+	defer cancel()
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("handler panic: %v", p)
+		}
+	}()
+	return h(hctx, ev)
 }
 
 const markPublishedSQL = `
@@ -302,13 +323,22 @@ func (d *OutboxDispatcher) recordFailure(ctx context.Context, tx pgx.Tx, pe pend
 	delay := backoff(pe.attempts)
 	nextAttempt := time.Now().Add(delay)
 
-	d.logger.Warn("outbox event handler failed",
-		"event_id", pe.id,
-		"event_type", pe.event.Type,
-		"attempts", pe.attempts+1,
-		"next_retry_in", delay,
-		"error", cause,
-	)
+	if pe.attempts+1 >= d.maxAttempts {
+		d.logger.Error("outbox event dropped: max attempts reached",
+			"event_id", pe.id,
+			"event_type", pe.event.Type,
+			"attempts", pe.attempts+1,
+			"error", cause,
+		)
+	} else {
+		d.logger.Warn("outbox event handler failed",
+			"event_id", pe.id,
+			"event_type", pe.event.Type,
+			"attempts", pe.attempts+1,
+			"next_retry_in", delay,
+			"error", cause,
+		)
+	}
 
 	if _, err := tx.Exec(ctx, recordFailureSQL, cause.Error(), nextAttempt, pe.id); err != nil {
 		return fmt.Errorf("record failure %s: %w", pe.id, err)

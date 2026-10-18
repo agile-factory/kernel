@@ -2,6 +2,12 @@ package http
 
 import "errors"
 
+// maxPasswordBytes is bcrypt's input limit; longer passwords would fail
+// hashing with a 500 instead of a clear 400.
+const maxPasswordBytes = 72
+
+var errPasswordTooLong = errors.New("password must be at most 72 bytes")
+
 // ─── Signup Owner ────────────────────────────────────────────────────────────
 
 // SignupOwnerRequest is the payload for POST /api/v1/auth/signup-owner.
@@ -25,6 +31,9 @@ func (r *SignupOwnerRequest) Validate() error {
 	if len(r.Password) < 12 {
 		return errors.New("password must be at least 12 characters")
 	}
+	if len(r.Password) > maxPasswordBytes {
+		return errPasswordTooLong
+	}
 	return nil
 }
 
@@ -43,7 +52,8 @@ type SignupOwnerResponse struct {
 // ─── Accept Invite ───────────────────────────────────────────────────────────
 
 // AcceptInviteRequest is the payload for POST /api/v1/auth/accept-invite.
-// Password is only required when the email is unknown to the system.
+// Password is always required: for a new user it becomes the account
+// password; for an existing user it must be that account's current password.
 type AcceptInviteRequest struct {
 	Token    string `json:"token"`
 	Password string `json:"password,omitempty"`
@@ -53,8 +63,11 @@ func (r *AcceptInviteRequest) Validate() error {
 	if r.Token == "" {
 		return errors.New("token is required")
 	}
-	if r.Password != "" && len(r.Password) < 12 {
-		return errors.New("password must be at least 12 characters")
+	if r.Password == "" {
+		return errors.New("password is required")
+	}
+	if len(r.Password) > maxPasswordBytes {
+		return errPasswordTooLong
 	}
 	return nil
 }

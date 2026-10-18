@@ -46,7 +46,7 @@ func (r *PostgresUserRepository) FindByEmail(ctx context.Context, email domain.E
 	)
 	err := txctx.DB(ctx, r.db).QueryRow(ctx, queryGetUserByEmail, email.String()).Scan(
 		&user.ID,
-		&user.Email,
+		&user.Email.Value, // pgx cannot scan into the Email struct itself
 		&user.HashedPassword,
 		&user.Role,
 		&user.EmailVerified,
@@ -72,7 +72,7 @@ func (r *PostgresUserRepository) FindByID(ctx context.Context, id string) (*doma
 	)
 	err := txctx.DB(ctx, r.db).QueryRow(ctx, queryGetUserByID, id).Scan(
 		&user.ID,
-		&user.Email,
+		&user.Email.Value, // pgx cannot scan into the Email struct itself
 		&user.HashedPassword,
 		&user.Role,
 		&user.EmailVerified,

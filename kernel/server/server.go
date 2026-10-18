@@ -10,7 +10,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/agile-factory/kernel/kernel/config"
 )
@@ -26,13 +28,24 @@ func New(cfg *config.Config, handler http.Handler) *Server {
 		httpServer: &http.Server{
 			Addr:    ":" + cfg.Port,
 			Handler: handler,
+			// Without these a client can hold a connection open forever
+			// (Slowloris). WriteTimeout sits above DefaultRequestTimeout so
+			// TimeoutMiddleware answers first.
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      DefaultRequestTimeout + 30*time.Second,
+			IdleTimeout:       120 * time.Second,
 		},
 	}
 }
 
-// Start runs the HTTP server.
+// Start runs the HTTP server. It returns nil after a graceful Shutdown and
+// an error only when the server could not start or stopped abnormally.
 func (s *Server) Start() error {
-	return s.httpServer.ListenAndServe()
+	if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
 
 // Shutdown gracefully shuts down the HTTP server.

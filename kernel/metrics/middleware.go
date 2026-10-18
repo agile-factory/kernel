@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 )
@@ -42,6 +41,8 @@ func HTTPMiddleware(rec Recorder) func(http.Handler) http.Handler {
 
 // InternalOnlyMiddleware restricts access to the wrapped handler by IP.
 // Any request whose remote address is not in the loopback range receives 403.
+// Caveat: behind a reverse proxy running on the same host every request
+// comes from loopback — do not expose /metrics through such a proxy.
 // For production use, configure METRICS_ALLOWED_CIDR and a proper network policy.
 //
 // This middleware is intentionally simple — production security relies on
@@ -49,7 +50,7 @@ func HTTPMiddleware(rec Recorder) func(http.Handler) http.Handler {
 func InternalOnlyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopback(r.RemoteAddr) {
-			http.Error(w, fmt.Sprintf("forbidden: metrics endpoint is internal-only (remote: %s)", r.RemoteAddr), http.StatusForbidden)
+			http.Error(w, "forbidden: metrics endpoint is internal-only", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)

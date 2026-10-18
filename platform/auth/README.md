@@ -57,7 +57,7 @@ authMod.RegisterRoutes(mux)
 | Méthode | Route | Auth | Description |
 |---|---|---|---|
 | `POST` | `/api/v1/auth/signup-owner` | — | Crée tenant + user + membership OWNER + token de vérification email dans une seule tx. Émet `auth.signup_owner`. |
-| `POST` | `/api/v1/auth/accept-invite` | — | Consomme un `invite_token`, crée le user si nouveau, crée membership ACTIVE. Émet `auth.invite_accepted`. |
+| `POST` | `/api/v1/auth/accept-invite` | — | Consomme un `invite_token`, crée le user si nouveau (sinon exige le mot de passe actuel du compte), crée membership ACTIVE. Émet `auth.invite_accepted`. |
 | `POST` | `/api/v1/auth/verify-email` | — | Consomme un email-verification token. Idempotent. |
 | `POST` | `/api/v1/auth/login` | — | Email + password → access + refresh tokens. |
 | `POST` | `/api/v1/auth/refresh` | — | Rolling rotation : révoque le refresh présenté, émet une nouvelle paire. |

@@ -347,8 +347,8 @@ Pas de target `migrate` séparée : les migrations sont **embarquées** dans cha
 | Variable | Défaut | Description |
 |---|---|---|
 | `APP_ENV` | `development` | `development` / `staging` / `production` |
-| `DATABASE_URL` | — | `postgres://user:pass@host:5432/db` |
-| `JWT_SECRET` | — | Min 32 bytes (HMAC-SHA256) |
+| `DATABASE_URL` | — | `postgres://user:pass@host:5432/db` (requis hors `development`/`test`) |
+| `JWT_SECRET` | — | Min 32 bytes (HMAC-SHA256). Requis hors `development`/`test` (refus de démarrer) ; en dev, un secret aléatoire par process est généré s'il est absent |
 | `PORT` | `8080` | Port HTTP |
 | `LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
 | `TOKEN_LIFESPAN` | `1h` | Durée de validité des access tokens |

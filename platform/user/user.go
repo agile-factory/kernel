@@ -6,7 +6,7 @@
 //
 //	userRepo := userinfra.NewPostgresUserProfileRepository(db)
 //	checker  := permission.New(memberRepo)
-//	userMod  := user.New(user.Config{Repo: userRepo, Checker: checker, Logger: log})
+//	userMod  := user.New(user.Config{Repo: userRepo, Checker: checker, Members: memberRepo, Logger: log})
 //	userMod.Subscribe(bus)              // creates profiles on auth.signup_owner events
 //	userMod.RegisterRoutes(mux)
 package user
@@ -34,6 +34,9 @@ var Migrations embed.FS
 type Config struct {
 	Repo    domain.UserProfileRepository
 	Checker permission.Checker
+	// Members scopes profile reads to the caller's tenant (typically the
+	// membership repository).
+	Members userhttp.MembershipFinder
 	Logger  *slog.Logger
 }
 
@@ -53,6 +56,9 @@ func New(cfg Config) (*Module, error) {
 	if cfg.Checker == nil {
 		return nil, errors.New("user.Config: Checker is required")
 	}
+	if cfg.Members == nil {
+		return nil, errors.New("user.Config: Members is required")
+	}
 	if cfg.Logger == nil {
 		return nil, errors.New("user.Config: Logger is required")
 	}
@@ -64,7 +70,7 @@ func New(cfg Config) (*Module, error) {
 		cfg:      cfg,
 		getUC:    getUC,
 		updateUC: updateUC,
-		handler:  userhttp.NewUserHandler(getUC, updateUC, cfg.Checker),
+		handler:  userhttp.NewUserHandler(getUC, updateUC, cfg.Checker, cfg.Members),
 	}, nil
 }
 

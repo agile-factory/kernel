@@ -9,6 +9,7 @@
 // Middleware ordering matters. ApplyGlobalMiddlewares applies, from outermost
 // to innermost: Recovery → Logger → handler. Route-level middlewares
 // (WithAuth, WithTenant) are added selectively by individual handlers.
+// Request bodies are capped at 1 MiB (middleware.MaxBytes).
 package http
 
 import (
@@ -30,11 +31,13 @@ func NewRouter(log *slog.Logger) *http.ServeMux {
 //
 //  1. Recovery    — outermost, catches panics from all layers below
 //  2. Logger      — logs every request with status, method, path, duration
+//  3. MaxBytes    — caps request bodies at DefaultMaxBodyBytes (1 MiB)
 //
 // Route-level middlewares (Auth, TenantContext) are applied selectively
 // via ApplyAuthMiddleware and ApplyTenantMiddleware helpers below.
 func ApplyGlobalMiddlewares(handler http.Handler, log *slog.Logger) http.Handler {
 	h := handler
+	h = middleware.MaxBytes(middleware.DefaultMaxBodyBytes)(h)
 	h = middleware.Logger(log)(h)
 	h = middleware.Recovery(log)(h)
 	return h

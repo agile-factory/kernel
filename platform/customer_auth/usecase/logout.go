@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 
 	"github.com/agile-factory/kernel/platform/customer_auth/domain"
 )
@@ -24,5 +25,8 @@ func (uc *CustomerLogoutUseCase) Execute(ctx context.Context, rawToken string) e
 		// Token already gone — idempotent logout.
 		return nil
 	}
-	return uc.refreshRepo.Revoke(ctx, stored.ID)
+	if err := uc.refreshRepo.Revoke(ctx, stored.ID); err != nil && !errors.Is(err, domain.ErrTokenConsumed) {
+		return err
+	}
+	return nil
 }

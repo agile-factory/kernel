@@ -56,6 +56,13 @@ func NewRefreshToken(id, userID, tenantID string, ttl time.Duration) (raw string
 // HashRefreshToken returns the hex SHA-256 of raw — the value stored in
 // refresh_tokens.token_hash and matched at refresh time.
 func HashRefreshToken(raw string) string {
+	return HashToken(raw)
+}
+
+// HashToken returns the hex SHA-256 of an opaque single-use token. Opaque
+// tokens (refresh, email verification) are stored only in this form so a
+// database leak does not hand out usable tokens.
+func HashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }
@@ -72,5 +79,12 @@ func generateOpaqueToken() (string, error) {
 type RefreshTokenRepository interface {
 	Save(ctx context.Context, t *RefreshToken) error
 	FindByHash(ctx context.Context, hash string) (*RefreshToken, error)
+	// FindByHashForUpdate is FindByHash with a row lock (SELECT … FOR
+	// UPDATE). Called inside a transaction, it serialises concurrent
+	// rotations of the same token so only one of them can succeed.
+	FindByHashForUpdate(ctx context.Context, hash string) (*RefreshToken, error)
 	Revoke(ctx context.Context, id string) error
+	// RevokeAllForUser revokes every still-active refresh token of userID.
+	// Used when a revoked token is replayed (probable theft).
+	RevokeAllForUser(ctx context.Context, userID string) error
 }

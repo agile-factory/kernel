@@ -39,6 +39,15 @@ const (
 		WHERE token_hash = $1
 	`
 
+	queryGetRefreshTokenByHashForUpdate = queryGetRefreshTokenByHash + `FOR UPDATE
+	`
+
+	queryRevokeAllRefreshTokensForUser = `
+		UPDATE refresh_tokens
+		SET revoked_at = NOW()
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`
+
 	queryRevokeRefreshToken = `
 		UPDATE refresh_tokens
 		SET revoked_at = NOW()

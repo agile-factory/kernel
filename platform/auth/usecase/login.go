@@ -26,6 +26,10 @@ type TokenGenerator interface {
 	GenerateToken(user *domain.User) (string, error)
 }
 
+// dummyPasswordHash is a bcrypt hash (cost 10, the default) of a random
+// string nobody knows. Login verifies against it when the email is unknown.
+const dummyPasswordHash = "$2a$10$xGrkO4RvYbbgUD2kLDM34O.mG4QzZU1fCF76UQixoey.J4X2UT7RO"
+
 // LoginOutput bundles the access + refresh tokens issued at login. The
 // refresh token is NOT tenant-scoped: the caller picks a tenant per-request
 // via the JWT (or a dedicated header / path) once they are signed in.
@@ -79,6 +83,9 @@ func (uc *LoginUseCase) Execute(ctx context.Context, emailStr, password string) 
 
 	user, err := uc.users.FindByEmail(ctx, email)
 	if err != nil {
+		// Burn a comparable amount of CPU so an unknown email is not
+		// distinguishable from a wrong password by response time.
+		_ = uc.verifier.Verify(dummyPasswordHash, password)
 		return nil, domain.ErrInvalidCredentials
 	}
 	if err := uc.verifier.Verify(user.HashedPassword, password); err != nil {

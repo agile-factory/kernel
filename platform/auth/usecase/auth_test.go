@@ -52,9 +52,10 @@ func (m *mockUserRepo) UpdateEmailVerified(ctx context.Context, userID string) e
 
 // mockRefreshTokenRepo simulates authdomain.RefreshTokenRepository in memory.
 type mockRefreshTokenRepo struct {
-	saved      []*authdomain.RefreshToken
-	revokedIDs []string
-	findFn     func(ctx context.Context, hash string) (*authdomain.RefreshToken, error)
+	saved             []*authdomain.RefreshToken
+	revokedIDs        []string
+	revokedAllForUser []string
+	findFn            func(ctx context.Context, hash string) (*authdomain.RefreshToken, error)
 }
 
 func (m *mockRefreshTokenRepo) Save(ctx context.Context, t *authdomain.RefreshToken) error {
@@ -67,6 +68,15 @@ func (m *mockRefreshTokenRepo) FindByHash(ctx context.Context, hash string) (*au
 		return m.findFn(ctx, hash)
 	}
 	return nil, authdomain.ErrTokenNotFound
+}
+
+func (m *mockRefreshTokenRepo) FindByHashForUpdate(ctx context.Context, hash string) (*authdomain.RefreshToken, error) {
+	return m.FindByHash(ctx, hash)
+}
+
+func (m *mockRefreshTokenRepo) RevokeAllForUser(ctx context.Context, userID string) error {
+	m.revokedAllForUser = append(m.revokedAllForUser, userID)
+	return nil
 }
 
 func (m *mockRefreshTokenRepo) Revoke(ctx context.Context, id string) error {

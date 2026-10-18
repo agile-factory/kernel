@@ -32,7 +32,8 @@ type CustomerRefreshTokenRepository interface {
 	// Returns ErrTokenNotFound when absent or revoked.
 	FindByHash(ctx context.Context, tokenHash string) (*CustomerRefreshToken, error)
 
-	// Revoke marks a specific refresh token as revoked.
+	// Revoke marks a specific refresh token as revoked. Returns
+	// ErrTokenConsumed when it was already revoked (lost a concurrent rotation).
 	Revoke(ctx context.Context, id string) error
 
 	// RevokeAllForEndCustomer revokes all refresh tokens for the given end-customer.

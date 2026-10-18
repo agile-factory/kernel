@@ -2,7 +2,9 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
+	stderrors "errors"
 	"net/http"
 	"time"
 
@@ -10,15 +12,23 @@ import (
 	"github.com/agile-factory/kernel/kernel/errors"
 	"github.com/agile-factory/kernel/kernel/permission"
 	"github.com/agile-factory/kernel/kernel/response"
+	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
 	"github.com/agile-factory/kernel/platform/user/domain"
 	"github.com/agile-factory/kernel/platform/user/usecase"
 )
+
+// MembershipFinder is the slice of the membership repository the handler
+// needs to scope profile reads to the caller's tenant.
+type MembershipFinder interface {
+	FindByUserAndTenant(ctx context.Context, userID, tenantID string) (*memberdomain.Membership, error)
+}
 
 // UserHandler handles HTTP requests for the user profile surface.
 type UserHandler struct {
 	getUC    *usecase.GetProfileUseCase
 	updateUC *usecase.UpdateProfileUseCase
 	checker  permission.Checker
+	members  MembershipFinder
 }
 
 // NewUserHandler wires the handler.
@@ -26,8 +36,9 @@ func NewUserHandler(
 	getUC *usecase.GetProfileUseCase,
 	updateUC *usecase.UpdateProfileUseCase,
 	checker permission.Checker,
+	members MembershipFinder,
 ) *UserHandler {
-	return &UserHandler{getUC: getUC, updateUC: updateUC, checker: checker}
+	return &UserHandler{getUC: getUC, updateUC: updateUC, checker: checker, members: members}
 }
 
 // profileResponse is the JSON shape sent to clients.
@@ -55,7 +66,10 @@ func toResponse(p *domain.UserProfile) profileResponse {
 
 // GetProfile handles GET /api/v1/users/{userId}/profile
 //
-// Any active tenant member with UserProfileView permission may read any profile.
+// A tenant member with UserProfileView permission may read their own profile
+// and the profiles of the other ACTIVE members of the same tenant. Profiles
+// of users outside the tenant answer 404, exactly like a missing profile, so
+// the endpoint cannot be used to probe other tenants' users.
 // Profiles are created at signup via Subscribe(bus); GET returns 404 if absent.
 func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	callerID := kernelauth.UserIDFromContext(r.Context())
@@ -73,6 +87,18 @@ func (h *UserHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	if targetUserID == "" {
 		response.Error(w, errors.BadRequest("userId path parameter is required"))
 		return
+	}
+
+	if targetUserID != callerID && !kernelauth.IsPlatformAdmin(r.Context()) {
+		m, err := h.members.FindByUserAndTenant(r.Context(), targetUserID, kernelauth.TenantIDFromContext(r.Context()))
+		if err != nil || !m.IsActive() {
+			if err != nil && !stderrors.Is(err, memberdomain.ErrMembershipNotFound) {
+				response.Error(w, errors.WrapInternal(err))
+				return
+			}
+			response.Error(w, errors.NotFound("user profile not found"))
+			return
+		}
 	}
 
 	out, err := h.getUC.Execute(r.Context(), usecase.GetProfileInput{

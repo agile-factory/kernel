@@ -18,6 +18,7 @@
 package response
 
 import (
+	"log/slog"
 	"encoding/json"
 	stderrors "errors"
 	"net/http"
@@ -46,11 +47,12 @@ type errorBody struct {
 	Debug    string `json:"debug,omitempty"` // populated in non-production only
 }
 
-// isProduction returns true when APP_ENV is "production" or "staging".
-// Both environments suppress internal stack details from API responses.
+// isProduction returns true unless APP_ENV is explicitly "development" or
+// "test": stack details are only surfaced where they are known to be safe,
+// so an unset or misspelt APP_ENV fails closed.
 func isProduction() bool {
 	env := os.Getenv("APP_ENV")
-	return env == "production" || env == "staging"
+	return env != "development" && env != "test"
 }
 
 // Error sends a JSON error response.
@@ -69,6 +71,12 @@ func Error(w http.ResponseWriter, err error) {
 	// even when the top-level value is a plain error.
 	if !stderrors.As(err, &appErr) {
 		appErr = errors.InternalServerError(err)
+	}
+
+	// The client only sees a generic message for 5xx; keep the cause in the
+	// server logs or the failure is undiagnosable.
+	if appErr.HTTPCode >= 500 {
+		slog.Error("internal error response", "code", appErr.Code, "error", err, "trace_id", appErr.TraceID)
 	}
 
 	body := errorBody{

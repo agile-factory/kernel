@@ -18,12 +18,15 @@ type timeoutBody struct {
 }
 
 // TimeoutMiddleware wraps every request with a context that carries a deadline
-// of d. If the handler does not complete before the deadline, a 503 JSON
-// response is sent and context cancellation propagates to the handler.
+// of d. The handler runs in its own goroutine and writes into a buffer
+// (headers included); the buffer is copied to the real ResponseWriter only
+// if the handler finishes in time. Past the deadline a 503 JSON response is
+// sent, context cancellation propagates to the handler, and anything it
+// writes afterwards is discarded (Write returns http.ErrHandlerTimeout).
 //
-// Note: the middleware can only send the 503 when the handler has not yet
-// called w.WriteHeader(). If the handler writes headers before timing out,
-// the status code it chose is preserved — only the body will be cut short.
+// A panic in the handler is re-raised on the request goroutine, so an outer
+// Recovery middleware turns it into a 500 — mount TimeoutMiddleware inside
+// Recovery. Streaming responses (http.Flusher) are not supported.
 func TimeoutMiddleware(d time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,56 +34,67 @@ func TimeoutMiddleware(d time.Duration) func(http.Handler) http.Handler {
 			defer cancel()
 
 			done := make(chan struct{})
-			tw := &timeoutResponseWriter{w: w}
+			panicked := make(chan any, 1)
+			tw := &timeoutResponseWriter{h: make(http.Header)}
 
 			go func() {
+				defer func() {
+					if p := recover(); p != nil {
+						panicked <- p
+					}
+				}()
 				next.ServeHTTP(tw, r.WithContext(ctx))
 				close(done)
 			}()
 
 			select {
+			case p := <-panicked:
+				panic(p)
 			case <-done:
-				// Handler finished in time — flush whatever it wrote.
 				tw.flush(w)
 			case <-ctx.Done():
-				// Deadline exceeded — write 503 if the handler has not yet
-				// committed a status code.
-				if !tw.headerWritten() {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusServiceUnavailable)
-					_ = json.NewEncoder(w).Encode(timeoutBody{Error: "request_timeout"})
-				}
+				tw.timeout()
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_ = json.NewEncoder(w).Encode(timeoutBody{Error: "request_timeout"})
 			}
 		})
 	}
 }
 
-// timeoutResponseWriter buffers the response so that TimeoutMiddleware can
-// detect whether the handler has started writing before the deadline fires.
+// timeoutResponseWriter buffers the whole response so TimeoutMiddleware can
+// discard it if the deadline fires first. Header() hands out a private map:
+// the handler goroutine never touches the real ResponseWriter.
 type timeoutResponseWriter struct {
-	mu          sync.Mutex // protects all fields below
-	w           http.ResponseWriter
+	h http.Header // only touched by the handler goroutine until done
+
+	mu          sync.Mutex // protects the fields below
 	code        int
 	buf         []byte
 	wroteHeader bool
+	timedOut    bool
 }
 
 func (tw *timeoutResponseWriter) Header() http.Header {
-	return tw.w.Header()
+	return tw.h
 }
 
 func (tw *timeoutResponseWriter) WriteHeader(code int) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
-	if !tw.wroteHeader {
-		tw.code = code
-		tw.wroteHeader = true
+	if tw.timedOut || tw.wroteHeader {
+		return
 	}
+	tw.code = code
+	tw.wroteHeader = true
 }
 
 func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
+	if tw.timedOut {
+		return 0, http.ErrHandlerTimeout
+	}
 	if !tw.wroteHeader {
 		tw.code = http.StatusOK
 		tw.wroteHeader = true
@@ -89,18 +103,22 @@ func (tw *timeoutResponseWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-// headerWritten reports whether the handler called WriteHeader or Write.
-func (tw *timeoutResponseWriter) headerWritten() bool {
+// timeout marks the writer as expired; later handler writes are dropped.
+func (tw *timeoutResponseWriter) timeout() {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
-	return tw.wroteHeader
+	tw.timedOut = true
 }
 
-// flush writes the buffered response to the underlying ResponseWriter.
-// It must only be called once, from the goroutine that owns w.
+// flush copies the buffered response to w. It must only be called once the
+// handler goroutine has returned.
 func (tw *timeoutResponseWriter) flush(w http.ResponseWriter) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
+	dst := w.Header()
+	for k, v := range tw.h {
+		dst[k] = v
+	}
 	if tw.wroteHeader {
 		w.WriteHeader(tw.code)
 		_, _ = w.Write(tw.buf)

@@ -2,10 +2,10 @@ package usecase
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/agile-factory/kernel/kernel/errors"
-	"github.com/agile-factory/kernel/kernel/txctx"
 	authdomain "github.com/agile-factory/kernel/platform/auth/domain"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,8 +19,15 @@ import (
 //
 // Atomicity (revoke-old + insert-new) is guaranteed via txctx so a crash in
 // between cannot leave both the old and the new tokens valid simultaneously.
+// The presented token's row is locked (FOR UPDATE) so two concurrent
+// rotations of the same token cannot both succeed.
+//
+// Reuse detection: presenting a token that was already revoked means either
+// a replay by an attacker or by the legitimate client after the attacker
+// rotated it. Both cases revoke every refresh token of the user, forcing a
+// fresh login.
 type RefreshTokenUseCase struct {
-	pool            *pgxpool.Pool
+	runInTx         txRunner
 	users           authdomain.UserRepository
 	refreshTokens   authdomain.RefreshTokenRepository
 	tokenIssuer     TokenGenerator
@@ -35,7 +42,7 @@ func NewRefreshTokenUseCase(
 	refreshTokenTTL time.Duration,
 ) *RefreshTokenUseCase {
 	return &RefreshTokenUseCase{
-		pool:            pool,
+		runInTx:         poolTxRunner(pool),
 		users:           users,
 		refreshTokens:   refreshTokens,
 		tokenIssuer:     tokenIssuer,
@@ -55,14 +62,16 @@ func (uc *RefreshTokenUseCase) Execute(ctx context.Context, rawRefreshToken stri
 	hash := authdomain.HashRefreshToken(rawRefreshToken)
 
 	out := &RefreshTokenOutput{}
+	var reusedByUserID string
 
-	txErr := txctx.ExecInTx(ctx, uc.pool, func(ctx context.Context) error {
-		stored, err := uc.refreshTokens.FindByHash(ctx, hash)
+	txErr := uc.runInTx(ctx, func(ctx context.Context) error {
+		stored, err := uc.refreshTokens.FindByHashForUpdate(ctx, hash)
 		if err != nil {
 			return err
 		}
 		now := time.Now().UTC()
 		if stored.RevokedAt != nil {
+			reusedByUserID = stored.UserID
 			return authdomain.ErrRefreshTokenRevoked
 		}
 		if !stored.IsActive(now) {
@@ -94,6 +103,14 @@ func (uc *RefreshTokenUseCase) Execute(ctx context.Context, rawRefreshToken stri
 		return nil
 	})
 	if txErr != nil {
+		if reusedByUserID != "" {
+			// Outside the rolled-back tx so the revocation sticks.
+			if err := uc.refreshTokens.RevokeAllForUser(ctx, reusedByUserID); err != nil {
+				slog.ErrorContext(ctx, "refresh token reuse: revoke all failed", "user_id", reusedByUserID, "error", err)
+			} else {
+				slog.WarnContext(ctx, "refresh token reuse detected; all sessions revoked", "user_id", reusedByUserID)
+			}
+		}
 		return nil, txErr
 	}
 
